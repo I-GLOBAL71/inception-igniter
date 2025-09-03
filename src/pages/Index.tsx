@@ -1,65 +1,170 @@
 import React, { useState } from 'react';
-import GameHeader from '@/components/game/GameHeader';
-import GameStats from '@/components/game/GameStats';
+import { Button } from '@/components/ui/button';
+import { ArrowLeft, Trophy, Target, Zap, TrendingUp } from 'lucide-react';
+import BettingScreen from '@/components/game/BettingScreen';
 import TetrisBoard from '@/components/tetris/TetrisBoard';
 
+type GameState = 'betting' | 'playing';
+
 const Index = () => {
+  const [gameState, setGameState] = useState<GameState>('betting');
   const [score, setScore] = useState(0);
   const [lines, setLines] = useState(0);
-  const [balance] = useState(25000); // Demo balance
+  const [balance] = useState(25000);
   const [demoMode] = useState(true);
+  const [currentBet, setCurrentBet] = useState(0);
 
-  // Calculate earnings based on score and demo mode
+  // Calculate earnings and multiplier based on bet
+  const multiplier = demoMode ? 2.5 : 1.0 + (currentBet / 10000);
   const earnings = demoMode ? Math.floor(score * 0.5) : Math.floor(score * 0.1);
-  const multiplier = demoMode ? 2.5 : 1.0 + (lines * 0.1);
+
+  const handleStartGame = (betAmount: number) => {
+    setCurrentBet(betAmount);
+    setScore(0);
+    setLines(0);
+    setGameState('playing');
+  };
+
+  const handleBackToBetting = () => {
+    setGameState('betting');
+    setScore(0);
+    setLines(0);
+  };
+
+  if (gameState === 'betting') {
+    return (
+      <BettingScreen 
+        balance={balance} 
+        demoMode={demoMode} 
+        onStartGame={handleStartGame} 
+      />
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-6 max-w-6xl">
+    <div className="h-screen bg-background overflow-hidden flex">
+      {/* Left Sidebar - Stats */}
+      <div className="w-80 bg-surface/30 backdrop-blur-sm border-r border-border p-6 flex flex-col">
         {/* Header */}
-        <GameHeader balance={balance} demoMode={demoMode} />
-        
-        {/* Game Stats */}
-        <div className="flex justify-center mb-6">
-          <GameStats 
-            score={score} 
-            lines={lines} 
-            multiplier={multiplier}
-            earnings={earnings}
-          />
-        </div>
-
-        {/* Main Game Area */}
-        <div className="flex justify-center">
-          <div className="w-full max-w-md">
-            <TetrisBoard 
-              onScoreChange={setScore}
-              onLinesChange={setLines}
-            />
+        <div className="flex items-center justify-between mb-6">
+          <Button
+            onClick={handleBackToBetting}
+            variant="ghost"
+            size="sm"
+            className="p-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div className="flex items-center space-x-2">
+            <Trophy className="w-5 h-5 text-primary" />
+            <span className="font-bold gaming-text-gradient">GameWin</span>
           </div>
         </div>
 
-        {/* Game Info */}
-        <div className="mt-8 text-center">
-          <div className="gaming-card p-6 max-w-2xl mx-auto">
-            <h2 className="text-2xl font-bold gaming-text-gradient mb-4">
-              🎮 Tetris Rémunéré
-            </h2>
-            <p className="text-muted-foreground mb-4">
-              Jouez au Tetris classique et gagnez de l'argent réel ! Plus vous faites de lignes, 
-              plus votre multiplicateur augmente et plus vos gains sont importants.
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div className="p-3 bg-surface/40 rounded-lg">
-                <div className="font-semibold text-primary mb-1">Mode Démo</div>
-                <div className="text-muted-foreground">
-                  Gains x2.5 pour tester le jeu
-                </div>
+        {/* Current Bet */}
+        <div className="gaming-card p-4 mb-6">
+          <div className="text-center">
+            <div className="text-sm text-muted-foreground mb-1">Mise actuelle</div>
+            <div className="text-xl font-bold text-primary">
+              {currentBet.toLocaleString()} FCFA
+            </div>
+            {demoMode && (
+              <div className="text-xs text-accent mt-1">Mode Démo x{multiplier}</div>
+            )}
+          </div>
+        </div>
+
+        {/* Game Stats */}
+        <div className="space-y-4 flex-1">
+          <div className="gaming-card p-4">
+            <div className="flex items-center mb-2">
+              <Target className="w-5 h-5 text-primary mr-2" />
+              <span className="text-sm text-muted-foreground">Score</span>
+            </div>
+            <div className="text-2xl font-bold gaming-text-gradient">
+              {score.toLocaleString()}
+            </div>
+          </div>
+
+          <div className="gaming-card p-4">
+            <div className="flex items-center mb-2">
+              <Zap className="w-5 h-5 text-accent mr-2" />
+              <span className="text-sm text-muted-foreground">Lignes</span>
+            </div>
+            <div className="text-2xl font-bold text-accent">
+              {lines}
+            </div>
+          </div>
+
+          <div className="gaming-card p-4">
+            <div className="flex items-center mb-2">
+              <TrendingUp className="w-5 h-5 text-success mr-2" />
+              <span className="text-sm text-muted-foreground">Gains actuels</span>
+            </div>
+            <div className="text-2xl font-bold text-success">
+              {earnings.toLocaleString()} FCFA
+            </div>
+          </div>
+        </div>
+
+        {/* Balance */}
+        <div className="gaming-card p-4 mt-6">
+          <div className="text-center">
+            <div className="text-sm text-muted-foreground mb-1">Solde</div>
+            <div className="text-lg font-bold text-secondary">
+              {balance.toLocaleString()} FCFA
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Game Area */}
+      <div className="flex-1 flex items-center justify-center">
+        <TetrisBoard 
+          onScoreChange={setScore}
+          onLinesChange={setLines}
+        />
+      </div>
+
+      {/* Right Panel - Next Piece & Instructions */}
+      <div className="w-80 bg-surface/30 backdrop-blur-sm border-l border-border p-6">
+        <div className="space-y-6">
+          {/* Instructions */}
+          <div className="gaming-card p-4">
+            <h3 className="font-semibold mb-3 text-center">🎮 Contrôles</h3>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <div className="flex items-center">
+                <div className="w-6 h-6 bg-primary/20 rounded mr-2 flex items-center justify-center text-xs">📱</div>
+                <span>Glisser pour déplacer</span>
               </div>
-              <div className="p-3 bg-surface/40 rounded-lg">
-                <div className="font-semibold text-secondary mb-1">Mode Réel</div>
-                <div className="text-muted-foreground">
-                  Misez et gagnez de vrais FCFA
+              <div className="flex items-center">
+                <div className="w-6 h-6 bg-secondary/20 rounded mr-2 flex items-center justify-center text-xs">👆</div>
+                <span>Tapoter pour tourner</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-6 h-6 bg-accent/20 rounded mr-2 flex items-center justify-center text-xs">⌨️</div>
+                <span>Flèches + Espace</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Game Rules */}
+          <div className="gaming-card p-4">
+            <h3 className="font-semibold mb-3 text-center">💰 Gains</h3>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <div className="flex justify-between">
+                <span>1 Point =</span>
+                <span className="text-success font-medium">
+                  {demoMode ? '0.5' : '0.1'} FCFA
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Multiplicateur:</span>
+                <span className="text-secondary font-medium">x{multiplier.toFixed(1)}</span>
+              </div>
+              <div className="pt-2 border-t border-border">
+                <div className="text-center text-xs">
+                  Plus de lignes = Plus de gains !
                 </div>
               </div>
             </div>
