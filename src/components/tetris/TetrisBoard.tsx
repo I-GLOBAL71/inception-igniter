@@ -306,26 +306,27 @@ export default function TetrisBoard({ onScoreChange, onLinesChange }: TetrisBoar
   };
 
   return (
-    <div className="flex flex-col items-center space-y-4 p-4">
+    <div className="flex flex-col items-center space-y-2 lg:space-y-4">
       {/* Game Controls */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2">
         <Button
           onClick={toggleGame}
           variant="default"
-          className="gaming-button-primary"
+          className="gaming-button-primary text-sm lg:text-base px-4 lg:px-6"
+          size="sm"
         >
           {gameOver ? (
-            <><RotateCcw className="w-4 h-4 mr-2" /> Rejouer</>
+            <><RotateCcw className="w-3 h-3 lg:w-4 lg:h-4 mr-1 lg:mr-2" /> Rejouer</>
           ) : isPlaying ? (
-            <><Pause className="w-4 h-4 mr-2" /> Pause</>
+            <><Pause className="w-3 h-3 lg:w-4 lg:h-4 mr-1 lg:mr-2" /> Pause</>
           ) : (
-            <><Play className="w-4 h-4 mr-2" /> Jouer</>
+            <><Play className="w-3 h-3 lg:w-4 lg:h-4 mr-1 lg:mr-2" /> Jouer</>
           )}
         </Button>
       </div>
 
-      {/* Game Status */}
-      <div className="flex gap-6 text-center">
+      {/* Desktop Game Status */}
+      <div className="hidden lg:flex gap-6 text-center">
         <div className="gaming-card px-4 py-2">
           <div className="text-sm text-muted-foreground">Score</div>
           <div className="text-lg font-bold gaming-text-gradient">{score.toLocaleString()}</div>
@@ -348,7 +349,7 @@ export default function TetrisBoard({ onScoreChange, onLinesChange }: TetrisBoar
         onClick={handleTap}
       >
         <div 
-          className="grid gap-0.5 p-4 bg-surface/40 rounded-lg border border-border"
+          className="grid gap-0.5 p-2 lg:p-4 bg-surface/40 rounded-lg border border-border"
           style={{ 
             gridTemplateColumns: `repeat(${BOARD_WIDTH}, 1fr)`,
             gridTemplateRows: `repeat(${BOARD_HEIGHT}, 1fr)`
@@ -359,11 +360,11 @@ export default function TetrisBoard({ onScoreChange, onLinesChange }: TetrisBoar
         
         {gameOver && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm rounded-lg">
-            <div className="text-center p-6">
-              <h2 className="text-2xl font-bold gaming-text-gradient mb-2">Game Over!</h2>
-              <p className="text-muted-foreground mb-4">Score final: {score.toLocaleString()}</p>
-              <Button onClick={toggleGame} className="gaming-button-secondary">
-                <RotateCcw className="w-4 h-4 mr-2" />
+            <div className="text-center p-4 lg:p-6">
+              <h2 className="text-xl lg:text-2xl font-bold gaming-text-gradient mb-2">Game Over!</h2>
+              <p className="text-muted-foreground mb-4 text-sm lg:text-base">Score final: {score.toLocaleString()}</p>
+              <Button onClick={toggleGame} className="gaming-button-secondary" size="sm">
+                <RotateCcw className="w-3 h-3 lg:w-4 lg:h-4 mr-1 lg:mr-2" />
                 Nouvelle partie
               </Button>
             </div>
@@ -372,9 +373,8 @@ export default function TetrisBoard({ onScoreChange, onLinesChange }: TetrisBoar
       </div>
 
       {/* Mobile Instructions */}
-      <div className="text-center text-sm text-muted-foreground max-w-xs">
-        <p>📱 Glissez pour déplacer, tapotez pour tourner</p>
-        <p>⌨️ Flèches pour déplacer, Espace pour tourner</p>
+      <div className="lg:hidden text-center text-xs text-muted-foreground max-w-xs px-2">
+        <p>📱 Glissez pour déplacer • 👆 Tapotez pour tourner</p>
       </div>
     </div>
   );
