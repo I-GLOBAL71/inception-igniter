@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Play, Pause, RotateCcw } from 'lucide-react';
+import { useSound } from '@/hooks/useSound';
+import LineEffect from '@/components/game/LineEffect';
+import DemoResultModal from '@/components/game/DemoResultModal';
 
 // Tetris piece definitions
 const PIECES = {
@@ -20,9 +23,11 @@ const INITIAL_SPEED = 1000;
 interface TetrisBoardProps {
   onScoreChange?: (score: number) => void;
   onLinesChange?: (lines: number) => void;
+  isDemo?: boolean;
+  onRealPlay?: () => void;
 }
 
-export default function TetrisBoard({ onScoreChange, onLinesChange }: TetrisBoardProps) {
+export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = false, onRealPlay }: TetrisBoardProps) {
   const [board, setBoard] = useState<(string | null)[][]>(() => 
     Array(BOARD_HEIGHT).fill(null).map(() => Array(BOARD_WIDTH).fill(null))
   );
@@ -33,9 +38,14 @@ export default function TetrisBoard({ onScoreChange, onLinesChange }: TetrisBoar
   const [isPlaying, setIsPlaying] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [dropSpeed, setDropSpeed] = useState(INITIAL_SPEED);
+  const [clearingLines, setClearingLines] = useState<number[]>([]);
+  const [showDemoResult, setShowDemoResult] = useState(false);
+  const [multiplier, setMultiplier] = useState(1);
+  const [fastDrop, setFastDrop] = useState(false);
   
   const gameLoopRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const { playMove, playRotate, playDrop, playLineClear, playGameOver } = useSound();
 
   // Generate random piece
   const generatePiece = useCallback(() => {
@@ -96,44 +106,91 @@ export default function TetrisBoard({ onScoreChange, onLinesChange }: TetrisBoar
     return newBoard;
   }, [board]);
 
-  // Clear completed lines
+  // Find lines to clear
+  const findLinesToClear = useCallback((boardState: (string | null)[][]) => {
+    const linesToClear: number[] = [];
+    for (let y = 0; y < BOARD_HEIGHT; y++) {
+      if (boardState[y].every(cell => cell !== null)) {
+        linesToClear.push(y);
+      }
+    }
+    return linesToClear;
+  }, []);
+
+  // Clear completed lines with effects
   const clearLines = useCallback((boardState: (string | null)[][]) => {
-    const newBoard = boardState.filter(row => row.some(cell => cell === null));
-    const clearedLines = BOARD_HEIGHT - newBoard.length;
+    const linesToClear = findLinesToClear(boardState);
     
-    // Add empty rows at the top
-    while (newBoard.length < BOARD_HEIGHT) {
-      newBoard.unshift(Array(BOARD_WIDTH).fill(null));
+    if (linesToClear.length > 0) {
+      setClearingLines(linesToClear);
+      playLineClear(linesToClear.length);
+      
+      // Calculate multiplier based on combo and consecutive clears
+      const newMultiplier = Math.min(5, multiplier + (linesToClear.length === 4 ? 0.5 : 0.2));
+      setMultiplier(newMultiplier);
+      
+      return boardState; // Return unchanged board during effect
     }
     
-    if (clearedLines > 0) {
+    return boardState;
+  }, [findLinesToClear, playLineClear, multiplier]);
+
+  // Actually remove the lines after effect
+  const executeLineClear = useCallback(() => {
+    if (clearingLines.length === 0) return;
+    
+    setBoard(prevBoard => {
+      const newBoard = prevBoard.filter((_, index) => !clearingLines.includes(index));
+      
+      // Add empty rows at the top
+      while (newBoard.length < BOARD_HEIGHT) {
+        newBoard.unshift(Array(BOARD_WIDTH).fill(null));
+      }
+      
+      const clearedLines = clearingLines.length;
       const newLines = lines + clearedLines;
-      const newScore = score + clearedLines * 100 * level;
+      const newScore = score + clearedLines * 100 * level * multiplier;
       const newLevel = Math.floor(newLines / 10) + 1;
       
       setLines(newLines);
       setScore(newScore);
       setLevel(newLevel);
-      setDropSpeed(Math.max(100, INITIAL_SPEED - (newLevel - 1) * 100));
+      
+      // Get speed settings from localStorage or use defaults
+      const savedSettings = localStorage.getItem('gameSettings');
+      const settings = savedSettings ? JSON.parse(savedSettings) : { 
+        initialSpeed: INITIAL_SPEED, 
+        speedIncrease: 100,
+        fastDropMultiplier: 20,
+        softDropMultiplier: 3
+      };
+      
+      setDropSpeed(Math.max(100, settings.initialSpeed - (newLevel - 1) * settings.speedIncrease));
       
       onLinesChange?.(newLines);
       onScoreChange?.(newScore);
-    }
+      
+      return newBoard;
+    });
     
-    return newBoard;
-  }, [lines, score, level, onLinesChange, onScoreChange]);
+    setClearingLines([]);
+  }, [clearingLines, lines, score, level, multiplier, onLinesChange, onScoreChange]);
 
   // Game loop
   const gameLoop = useCallback(() => {
-    if (!currentPiece || gameOver) return;
+    if (!currentPiece || gameOver || clearingLines.length > 0) return;
 
+    const speedMultiplier = fastDrop ? 20 : 1;
+    
     if (isValidMove(currentPiece, currentPiece.x, currentPiece.y + 1)) {
       setCurrentPiece(prev => ({ ...prev, y: prev.y + 1 }));
     } else {
+      playDrop();
+      
       // Place piece and generate new one
       const newBoard = placePiece(currentPiece);
-      const clearedBoard = clearLines(newBoard);
-      setBoard(clearedBoard);
+      clearLines(newBoard);
+      setBoard(newBoard);
       
       const newPiece = generatePiece();
       
@@ -141,34 +198,42 @@ export default function TetrisBoard({ onScoreChange, onLinesChange }: TetrisBoar
       if (!isValidMove(newPiece, newPiece.x, newPiece.y)) {
         setGameOver(true);
         setIsPlaying(false);
+        playGameOver();
+        
+        if (isDemo) {
+          setShowDemoResult(true);
+        }
         return;
       }
       
       setCurrentPiece(newPiece);
     }
-  }, [currentPiece, gameOver, isValidMove, placePiece, clearLines, generatePiece]);
+  }, [currentPiece, gameOver, clearingLines, fastDrop, isValidMove, placePiece, clearLines, generatePiece, playDrop, playGameOver, isDemo]);
 
   // Move piece
   const movePiece = useCallback((dx: number, dy: number) => {
-    if (!currentPiece || gameOver) return;
+    if (!currentPiece || gameOver || clearingLines.length > 0) return;
     
     const newX = currentPiece.x + dx;
     const newY = currentPiece.y + dy;
     
     if (isValidMove(currentPiece, newX, newY)) {
       setCurrentPiece(prev => ({ ...prev, x: newX, y: newY }));
+      if (dx !== 0) playMove();
+      if (dy > 0) setFastDrop(true);
     }
-  }, [currentPiece, gameOver, isValidMove]);
+  }, [currentPiece, gameOver, clearingLines, isValidMove, playMove]);
 
   // Rotate current piece
   const rotate = useCallback(() => {
-    if (!currentPiece || gameOver) return;
+    if (!currentPiece || gameOver || clearingLines.length > 0) return;
     
     const rotatedShape = rotatePiece(currentPiece);
     if (isValidMove(currentPiece, currentPiece.x, currentPiece.y, rotatedShape)) {
       setCurrentPiece(prev => ({ ...prev, shape: rotatedShape }));
+      playRotate();
     }
-  }, [currentPiece, gameOver, rotatePiece, isValidMove]);
+  }, [currentPiece, gameOver, clearingLines, rotatePiece, isValidMove, playRotate]);
 
   // Touch controls
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -231,8 +296,9 @@ export default function TetrisBoard({ onScoreChange, onLinesChange }: TetrisBoar
 
   // Game loop effect
   useEffect(() => {
-    if (isPlaying && !gameOver) {
-      gameLoopRef.current = setInterval(gameLoop, dropSpeed);
+    if (isPlaying && !gameOver && clearingLines.length === 0) {
+      const currentSpeed = fastDrop ? Math.max(50, dropSpeed / 20) : dropSpeed;
+      gameLoopRef.current = setInterval(gameLoop, currentSpeed);
     } else if (gameLoopRef.current) {
       clearInterval(gameLoopRef.current);
     }
@@ -242,12 +308,12 @@ export default function TetrisBoard({ onScoreChange, onLinesChange }: TetrisBoar
         clearInterval(gameLoopRef.current);
       }
     };
-  }, [isPlaying, gameOver, gameLoop, dropSpeed]);
+  }, [isPlaying, gameOver, gameLoop, dropSpeed, fastDrop, clearingLines]);
 
   // Keyboard controls
   useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
-      if (!isPlaying || gameOver) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isPlaying || gameOver || clearingLines.length > 0) return;
       
       switch (e.key) {
         case 'ArrowLeft':
@@ -260,6 +326,7 @@ export default function TetrisBoard({ onScoreChange, onLinesChange }: TetrisBoar
           break;
         case 'ArrowDown':
           e.preventDefault();
+          setFastDrop(true);
           movePiece(0, 1);
           break;
         case 'ArrowUp':
@@ -270,9 +337,19 @@ export default function TetrisBoard({ onScoreChange, onLinesChange }: TetrisBoar
       }
     };
 
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [isPlaying, gameOver, movePiece, rotate]);
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown') {
+        setFastDrop(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [isPlaying, gameOver, clearingLines, movePiece, rotate]);
 
   // Render the game board with current piece
   const renderBoard = () => {
@@ -306,76 +383,132 @@ export default function TetrisBoard({ onScoreChange, onLinesChange }: TetrisBoar
   };
 
   return (
-    <div className="flex flex-col items-center space-y-2 lg:space-y-4">
-      {/* Game Controls */}
-      <div className="flex items-center gap-2">
-        <Button
-          onClick={toggleGame}
-          variant="default"
-          className="gaming-button-primary text-sm lg:text-base px-4 lg:px-6"
-          size="sm"
-        >
-          {gameOver ? (
-            <><RotateCcw className="w-3 h-3 lg:w-4 lg:h-4 mr-1 lg:mr-2" /> Rejouer</>
-          ) : isPlaying ? (
-            <><Pause className="w-3 h-3 lg:w-4 lg:h-4 mr-1 lg:mr-2" /> Pause</>
-          ) : (
-            <><Play className="w-3 h-3 lg:w-4 lg:h-4 mr-1 lg:mr-2" /> Jouer</>
-          )}
-        </Button>
-      </div>
-
-      {/* Desktop Game Status */}
-      <div className="hidden lg:flex gap-6 text-center">
-        <div className="gaming-card px-4 py-2">
-          <div className="text-sm text-muted-foreground">Score</div>
-          <div className="text-lg font-bold gaming-text-gradient">{score.toLocaleString()}</div>
-        </div>
-        <div className="gaming-card px-4 py-2">
-          <div className="text-sm text-muted-foreground">Lignes</div>
-          <div className="text-lg font-bold text-accent">{lines}</div>
-        </div>
-        <div className="gaming-card px-4 py-2">
-          <div className="text-sm text-muted-foreground">Niveau</div>
-          <div className="text-lg font-bold text-secondary">{level}</div>
-        </div>
-      </div>
-
-      {/* Game Board */}
-      <div 
-        className="game-board relative select-none"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        onClick={handleTap}
-      >
-        <div 
-          className="grid gap-0.5 p-2 lg:p-4 bg-surface/40 rounded-lg border border-border"
-          style={{ 
-            gridTemplateColumns: `repeat(${BOARD_WIDTH}, 1fr)`,
-            gridTemplateRows: `repeat(${BOARD_HEIGHT}, 1fr)`
-          }}
-        >
-          {renderBoard()}
-        </div>
-        
-        {gameOver && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm rounded-lg">
-            <div className="text-center p-4 lg:p-6">
-              <h2 className="text-xl lg:text-2xl font-bold gaming-text-gradient mb-2">Game Over!</h2>
-              <p className="text-muted-foreground mb-4 text-sm lg:text-base">Score final: {score.toLocaleString()}</p>
-              <Button onClick={toggleGame} className="gaming-button-secondary" size="sm">
-                <RotateCcw className="w-3 h-3 lg:w-4 lg:h-4 mr-1 lg:mr-2" />
-                Nouvelle partie
-              </Button>
+    <>
+      <div className="flex flex-col items-center h-full">
+        {/* Mobile Stats - Fixed at top */}
+        <div className="lg:hidden w-full px-4 py-2 bg-background/80 backdrop-blur-sm border-b border-border">
+          <div className="flex justify-between items-center text-sm">
+            <div className="text-center">
+              <div className="gaming-text-gradient font-bold">{score.toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground">Score</div>
+            </div>
+            <div className="text-center">
+              <div className="text-accent font-bold">{lines}</div>
+              <div className="text-xs text-muted-foreground">Lignes</div>
+            </div>
+            <div className="text-center">
+              <div className="text-secondary font-bold">{level}</div>
+              <div className="text-xs text-muted-foreground">Niveau</div>
+            </div>
+            <div className="text-center">
+              <div className="text-success font-bold">x{multiplier.toFixed(1)}</div>
+              <div className="text-xs text-muted-foreground">Multi</div>
             </div>
           </div>
-        )}
+        </div>
+
+        {/* Game Controls */}
+        <div className="flex items-center gap-2 p-2">
+          <Button
+            onClick={toggleGame}
+            variant="default"
+            className="gaming-button-primary text-sm px-4"
+            size="sm"
+          >
+            {gameOver ? (
+              <><RotateCcw className="w-3 h-3 mr-1" /> Rejouer</>
+            ) : isPlaying ? (
+              <><Pause className="w-3 h-3 mr-1" /> Pause</>
+            ) : (
+              <><Play className="w-3 h-3 mr-1" /> Jouer</>
+            )}
+          </Button>
+        </div>
+
+        {/* Desktop Game Status */}
+        <div className="hidden lg:flex gap-6 text-center mb-4">
+          <div className="gaming-card px-4 py-2">
+            <div className="text-sm text-muted-foreground">Score</div>
+            <div className="text-lg font-bold gaming-text-gradient">{score.toLocaleString()}</div>
+          </div>
+          <div className="gaming-card px-4 py-2">
+            <div className="text-sm text-muted-foreground">Lignes</div>
+            <div className="text-lg font-bold text-accent">{lines}</div>
+          </div>
+          <div className="gaming-card px-4 py-2">
+            <div className="text-sm text-muted-foreground">Niveau</div>
+            <div className="text-lg font-bold text-secondary">{level}</div>
+          </div>
+          <div className="gaming-card px-4 py-2">
+            <div className="text-sm text-muted-foreground">Multiplicateur</div>
+            <div className="text-lg font-bold text-success">x{multiplier.toFixed(1)}</div>
+          </div>
+        </div>
+
+        {/* Game Board - Flex-1 to fill remaining space */}
+        <div className="flex-1 flex items-center justify-center w-full px-2">
+          <div 
+            className="game-board relative select-none max-w-full"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            onClick={handleTap}
+          >
+            <div 
+              className="grid gap-0.5 p-2 bg-surface/40 rounded-lg border border-border"
+              style={{ 
+                gridTemplateColumns: `repeat(${BOARD_WIDTH}, 1fr)`,
+                gridTemplateRows: `repeat(${BOARD_HEIGHT}, 1fr)`,
+                width: 'min(300px, 80vw)',
+                height: 'min(600px, 70vh)',
+              }}
+            >
+              {renderBoard()}
+            </div>
+            
+            {/* Line clearing effects */}
+            <LineEffect 
+              lines={clearingLines} 
+              onComplete={executeLineClear}
+            />
+            
+            {gameOver && !showDemoResult && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm rounded-lg">
+                <div className="text-center p-4">
+                  <h2 className="text-xl font-bold gaming-text-gradient mb-2">Game Over!</h2>
+                  <p className="text-muted-foreground mb-4 text-sm">Score final: {score.toLocaleString()}</p>
+                  <Button onClick={toggleGame} className="gaming-button-secondary" size="sm">
+                    <RotateCcw className="w-3 h-3 mr-1" />
+                    Nouvelle partie
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Mobile Instructions - Fixed at bottom */}
+        <div className="lg:hidden text-center text-xs text-muted-foreground p-2 bg-background/50">
+          <p>📱 Glissez ← → • 👆 Tapotez pour tourner • ⬇ Maintenez pour accélérer</p>
+        </div>
       </div>
 
-      {/* Mobile Instructions */}
-      <div className="lg:hidden text-center text-xs text-muted-foreground max-w-xs px-2">
-        <p>📱 Glissez pour déplacer • 👆 Tapotez pour tourner</p>
-      </div>
-    </div>
+      {/* Demo Result Modal */}
+      {showDemoResult && (
+        <DemoResultModal
+          score={score}
+          lines={lines}
+          multiplier={multiplier}
+          onPlayReal={() => {
+            setShowDemoResult(false);
+            onRealPlay?.();
+          }}
+          onPlayAgain={() => {
+            setShowDemoResult(false);
+            toggleGame();
+          }}
+          onClose={() => setShowDemoResult(false)}
+        />
+      )}
+    </>
   );
 }

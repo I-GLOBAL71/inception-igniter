@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Trophy, Target, Zap, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Trophy, Target, Zap, TrendingUp, Settings } from 'lucide-react';
 import BettingScreen from '@/components/game/BettingScreen';
 import TetrisBoard from '@/components/tetris/TetrisBoard';
+import AdminPanel from '@/components/admin/AdminPanel';
+import { useCurrency } from '@/hooks/useCurrency';
 
 type GameState = 'betting' | 'playing';
 
@@ -11,18 +13,26 @@ const Index = () => {
   const [score, setScore] = useState(0);
   const [lines, setLines] = useState(0);
   const [balance] = useState(25000);
-  const [demoMode] = useState(true);
+  const [isDemo, setIsDemo] = useState(true);
   const [currentBet, setCurrentBet] = useState(0);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const { formatAmount } = useCurrency();
 
   // Calculate earnings and multiplier based on bet
-  const multiplier = demoMode ? 2.5 : 1.0 + (currentBet / 10000);
-  const earnings = demoMode ? Math.floor(score * 0.5) : Math.floor(score * 0.1);
+  const multiplier = isDemo ? 2.5 : 1.0 + (currentBet / 10000);
+  const earnings = isDemo ? Math.floor(score * 0.5) : Math.floor(score * 0.1);
 
-  const handleStartGame = (betAmount: number) => {
+  const handleStartGame = (betAmount: number, demo: boolean = true) => {
     setCurrentBet(betAmount);
+    setIsDemo(demo);
     setScore(0);
     setLines(0);
     setGameState('playing');
+  };
+
+  const handleRealPlay = () => {
+    setIsDemo(false);
+    setGameState('betting');
   };
 
   const handleBackToBetting = () => {
@@ -35,7 +45,7 @@ const Index = () => {
     return (
       <BettingScreen 
         balance={balance} 
-        demoMode={demoMode} 
+        demoMode={isDemo} 
         onStartGame={handleStartGame} 
       />
     );
@@ -61,7 +71,7 @@ const Index = () => {
           <div className="text-sm font-bold text-primary">
             {currentBet.toLocaleString()} FCFA
           </div>
-          {demoMode && (
+          {isDemo && (
             <div className="text-xs text-accent">x{multiplier}</div>
           )}
         </div>
@@ -113,7 +123,7 @@ const Index = () => {
               <div className="text-xl font-bold text-primary">
                 {currentBet.toLocaleString()} FCFA
               </div>
-              {demoMode && (
+              {isDemo && (
                 <div className="text-xs text-accent mt-1">Mode Démo x{multiplier}</div>
               )}
             </div>
@@ -169,6 +179,8 @@ const Index = () => {
             <TetrisBoard 
               onScoreChange={setScore}
               onLinesChange={setLines}
+              isDemo={isDemo}
+              onRealPlay={handleRealPlay}
             />
           </div>
         </div>
@@ -202,7 +214,7 @@ const Index = () => {
                 <div className="flex justify-between">
                   <span>1 Point =</span>
                   <span className="text-success font-medium">
-                    {demoMode ? '0.5' : '0.1'} FCFA
+                    {isDemo ? '0.5' : '0.1'} FCFA
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -219,6 +231,19 @@ const Index = () => {
           </div>
         </div>
       </div>
+
+      {/* Admin Panel */}
+      {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
+      
+      {/* Admin Access Button */}
+      <Button
+        onClick={() => setShowAdmin(true)}
+        variant="ghost"
+        size="sm"
+        className="fixed bottom-4 right-4 opacity-30 hover:opacity-100"
+      >
+        <Settings className="w-4 h-4" />
+      </Button>
     </div>
   );
 };

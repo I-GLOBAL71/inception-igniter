@@ -1,5 +1,6 @@
 import React from 'react';
 import { TrendingUp, Target, Zap, Star } from 'lucide-react';
+import { useCurrency } from '@/hooks/useCurrency';
 
 interface GameStatsProps {
   score: number;
@@ -9,6 +10,8 @@ interface GameStatsProps {
 }
 
 export default function GameStats({ score, lines, multiplier = 1, earnings = 0 }: GameStatsProps) {
+  const { formatAmount } = useCurrency();
+  
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 w-full max-w-4xl">
       {/* Score */}
@@ -51,7 +54,7 @@ export default function GameStats({ score, lines, multiplier = 1, earnings = 0 }
           <span className="text-sm text-muted-foreground">Gains</span>
         </div>
         <div className="text-xl font-bold text-success">
-          {earnings.toLocaleString()} FCFA
+          {formatAmount(earnings)}
         </div>
       </div>
     </div>
