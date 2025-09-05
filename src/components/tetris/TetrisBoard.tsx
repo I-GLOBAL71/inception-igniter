@@ -45,6 +45,7 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
   
   const gameLoopRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const boardRef = useRef<HTMLDivElement | null>(null);
   const { playMove, playRotate, playDrop, playLineClear, playGameOver } = useSound();
 
   // Generate random piece
@@ -237,6 +238,7 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
 
   // Touch controls
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.cancelable) e.preventDefault();
     const touch = e.touches[0];
     touchStartRef.current = { x: touch.clientX, y: touch.clientY };
   }, []);
@@ -246,11 +248,12 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
     const touch = e.touches[0];
     const deltaX = touch.clientX - touchStartRef.current.x;
     const deltaY = touch.clientY - touchStartRef.current.y;
-    const minSwipeDistance = 24;
+    const minSwipeDistance = 16;
 
-    // If user drags down significantly, enable fast drop
-    if (deltaY > minSwipeDistance) {
+    // Downward drag -> enable fast drop and block browser pull-to-refresh
+    if (deltaY > minSwipeDistance && Math.abs(deltaY) > Math.abs(deltaX)) {
       setFastDrop(true);
+      if (e.cancelable) e.preventDefault();
     }
   }, []);
 
@@ -365,6 +368,34 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
     };
   }, [isPlaying, gameOver, clearingLines, movePiece, rotate]);
 
+  // Native non-passive touch listeners to fully prevent pull-to-refresh
+  useEffect(() => {
+    const el = boardRef.current;
+    if (!el) return;
+
+    const onStart = (ev: TouchEvent) => {
+      if (ev.cancelable) ev.preventDefault();
+    };
+
+    const onMove = (ev: TouchEvent) => {
+      if (!touchStartRef.current) return;
+      const touch = ev.touches[0];
+      const deltaX = touch.clientX - touchStartRef.current.x;
+      const deltaY = touch.clientY - touchStartRef.current.y;
+      if (deltaY > 16 && Math.abs(deltaY) > Math.abs(deltaX)) {
+        setFastDrop(true);
+        if (ev.cancelable) ev.preventDefault();
+      }
+    };
+
+    el.addEventListener('touchstart', onStart, { passive: false });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+    };
+  }, []);
+
   // Render the game board with current piece
   const renderBoard = () => {
     const displayBoard = board.map(row => [...row]);
@@ -462,7 +493,8 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
         {/* Game Board - Adjusted for mobile visibility */}
         <div className="flex-1 flex items-center justify-center w-full px-2 pb-2">
           <div 
-            className="game-board relative select-none max-w-full"
+            ref={boardRef}
+            className="game-board relative select-none max-w-full touch-none overscroll-contain"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
@@ -474,8 +506,7 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
                 gridTemplateColumns: `repeat(${BOARD_WIDTH}, 1fr)`,
                 gridTemplateRows: `repeat(${BOARD_HEIGHT}, 1fr)`,
                 aspectRatio: '10 / 20',
-                width: 'min(92vw, 320px)',
-                maxHeight: 'calc(100dvh - 220px)',
+                width: 'min(92vw, calc((100dvh - 220px) * 0.5))'
               }}
             >
               {renderBoard()}
