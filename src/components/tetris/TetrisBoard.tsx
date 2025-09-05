@@ -445,8 +445,8 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
           </div>
         </div>
 
-        {/* Game Board - Flex-1 to fill remaining space */}
-        <div className="flex-1 flex items-center justify-center w-full px-2">
+        {/* Game Board - Adjusted for mobile visibility */}
+        <div className="flex-1 flex items-center justify-center w-full px-2 pb-2">
           <div 
             className="game-board relative select-none max-w-full"
             onTouchStart={handleTouchStart}
@@ -458,8 +458,8 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
               style={{ 
                 gridTemplateColumns: `repeat(${BOARD_WIDTH}, 1fr)`,
                 gridTemplateRows: `repeat(${BOARD_HEIGHT}, 1fr)`,
-                width: 'min(300px, 80vw)',
-                height: 'min(600px, 70vh)',
+                width: 'min(280px, 75vw)',
+                height: 'min(560px, 55vh)',
               }}
             >
               {renderBoard()}

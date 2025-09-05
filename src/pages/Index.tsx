@@ -4,12 +4,13 @@ import { ArrowLeft, Trophy, Target, Zap, TrendingUp, Settings } from 'lucide-rea
 import BettingScreen from '@/components/game/BettingScreen';
 import TetrisBoard from '@/components/tetris/TetrisBoard';
 import AdminPanel from '@/components/admin/AdminPanel';
+import LandingOverlay from '@/components/game/LandingOverlay';
 import { useCurrency } from '@/hooks/useCurrency';
 
-type GameState = 'betting' | 'playing';
+type GameState = 'landing' | 'betting' | 'playing';
 
 const Index = () => {
-  const [gameState, setGameState] = useState<GameState>('betting');
+  const [gameState, setGameState] = useState<GameState>('landing');
   const [score, setScore] = useState(0);
   const [lines, setLines] = useState(0);
   const [balance] = useState(25000);
@@ -40,6 +41,33 @@ const Index = () => {
     setScore(0);
     setLines(0);
   };
+
+  const handleStartDemo = () => {
+    setIsDemo(true);
+    setGameState('betting');
+  };
+
+  const handleStartReal = () => {
+    setIsDemo(false);
+    setGameState('betting');
+  };
+
+  if (gameState === 'landing') {
+    return (
+      <div className="h-screen bg-background overflow-hidden">
+        {/* Background Game Preview */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-30">
+          <TetrisBoard onScoreChange={() => {}} onLinesChange={() => {}} isDemo={true} />
+        </div>
+        
+        {/* Landing Overlay */}
+        <LandingOverlay 
+          onStartDemo={handleStartDemo}
+          onStartReal={handleStartReal}
+        />
+      </div>
+    );
+  }
 
   if (gameState === 'betting') {
     return (
