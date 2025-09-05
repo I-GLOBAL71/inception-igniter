@@ -241,6 +241,19 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
     touchStartRef.current = { x: touch.clientX, y: touch.clientY };
   }, []);
 
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const touch = e.touches[0];
+    const deltaX = touch.clientX - touchStartRef.current.x;
+    const deltaY = touch.clientY - touchStartRef.current.y;
+    const minSwipeDistance = 24;
+
+    // If user drags down significantly, enable fast drop
+    if (deltaY > minSwipeDistance) {
+      setFastDrop(true);
+    }
+  }, []);
+
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     if (!touchStartRef.current) return;
     
@@ -256,14 +269,15 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
         movePiece(deltaX > 0 ? 1 : -1, 0);
       }
     } else {
-      // Vertical swipe
-      if (deltaY > minSwipeDistance) {
-        movePiece(0, 1);
+      // Vertical swipe up = rotate
+      if (deltaY < -minSwipeDistance) {
+        rotate();
       }
     }
     
+    setFastDrop(false);
     touchStartRef.current = null;
-  }, [movePiece]);
+  }, [movePiece, rotate]);
 
   const handleTap = useCallback(() => {
     rotate();
@@ -384,7 +398,7 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
 
   return (
     <>
-      <div className="flex flex-col items-center h-full">
+      <div className="flex flex-col items-center min-h-[100dvh] justify-between" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {/* Mobile Stats - Fixed at top */}
         <div className="lg:hidden w-full px-4 py-2 bg-background/80 backdrop-blur-sm border-b border-border">
           <div className="flex justify-between items-center text-sm">
@@ -450,6 +464,7 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
           <div 
             className="game-board relative select-none max-w-full"
             onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
             onClick={handleTap}
           >
@@ -458,8 +473,9 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
               style={{ 
                 gridTemplateColumns: `repeat(${BOARD_WIDTH}, 1fr)`,
                 gridTemplateRows: `repeat(${BOARD_HEIGHT}, 1fr)`,
-                width: 'min(280px, 75vw)',
-                height: 'min(560px, 55vh)',
+                aspectRatio: '10 / 20',
+                width: 'min(92vw, 320px)',
+                maxHeight: 'calc(100dvh - 220px)',
               }}
             >
               {renderBoard()}
