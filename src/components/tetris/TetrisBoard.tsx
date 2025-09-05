@@ -368,31 +368,47 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
     };
   }, [isPlaying, gameOver, clearingLines, movePiece, rotate]);
 
-  // Native non-passive touch listeners to fully prevent pull-to-refresh
+  // Native non-passive touch listeners to prevent pull-to-refresh only on drag down
   useEffect(() => {
     const el = boardRef.current;
     if (!el) return;
 
+    let startY = 0;
+    let isDragging = false;
+
     const onStart = (ev: TouchEvent) => {
-      if (ev.cancelable) ev.preventDefault();
+      startY = ev.touches[0].clientY;
+      isDragging = false;
     };
 
     const onMove = (ev: TouchEvent) => {
       if (!touchStartRef.current) return;
+      
       const touch = ev.touches[0];
-      const deltaX = touch.clientX - touchStartRef.current.x;
-      const deltaY = touch.clientY - touchStartRef.current.y;
-      if (deltaY > 16 && Math.abs(deltaY) > Math.abs(deltaX)) {
+      const deltaY = touch.clientY - startY;
+      
+      // Only prevent if dragging down significantly (avoid blocking taps)
+      if (deltaY > 20) {
+        isDragging = true;
         setFastDrop(true);
         if (ev.cancelable) ev.preventDefault();
       }
     };
 
+    const onEnd = () => {
+      if (!isDragging) {
+        // This was a tap, not a drag - let React handle it
+      }
+      isDragging = false;
+    };
+
     el.addEventListener('touchstart', onStart, { passive: false });
     el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onEnd, { passive: false });
     return () => {
       el.removeEventListener('touchstart', onStart);
       el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
     };
   }, []);
 
@@ -491,7 +507,7 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
         </div>
 
         {/* Game Board - Adjusted for mobile visibility */}
-        <div className="flex-1 flex items-center justify-center w-full px-2 pb-2">
+        <div className="flex-1 flex items-end justify-center w-full px-2 pb-8">
           <div 
             ref={boardRef}
             className="game-board relative select-none max-w-full touch-none overscroll-contain"
@@ -506,7 +522,8 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
                 gridTemplateColumns: `repeat(${BOARD_WIDTH}, 1fr)`,
                 gridTemplateRows: `repeat(${BOARD_HEIGHT}, 1fr)`,
                 aspectRatio: '10 / 20',
-                width: 'min(92vw, calc((100dvh - 220px) * 0.5))'
+                width: 'min(90vw, calc((100dvh - 200px) * 0.5))',
+                maxHeight: 'calc(100dvh - 180px)'
               }}
             >
               {renderBoard()}
