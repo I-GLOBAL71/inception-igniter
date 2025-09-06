@@ -14,7 +14,179 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      economic_config: {
+        Row: {
+          base_return_rate: number
+          created_at: string
+          id: string
+          jackpot_share_percentage: number
+          jackpot_trigger_rate: number
+          max_win_multiplier: number
+          platform_share_percentage: number
+          player_share_percentage: number
+          updated_at: string
+        }
+        Insert: {
+          base_return_rate?: number
+          created_at?: string
+          id?: string
+          jackpot_share_percentage?: number
+          jackpot_trigger_rate?: number
+          max_win_multiplier?: number
+          platform_share_percentage?: number
+          player_share_percentage?: number
+          updated_at?: string
+        }
+        Update: {
+          base_return_rate?: number
+          created_at?: string
+          id?: string
+          jackpot_share_percentage?: number
+          jackpot_trigger_rate?: number
+          max_win_multiplier?: number
+          platform_share_percentage?: number
+          player_share_percentage?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      game_batches: {
+        Row: {
+          actual_jackpot_contribution: number
+          actual_platform_revenue: number
+          actual_player_payout: number
+          batch_name: string
+          created_at: string
+          games_played: number
+          id: string
+          is_active: boolean
+          jackpot_contribution_target: number
+          platform_revenue_target: number
+          player_payout_target: number
+          total_games: number
+          total_investment: number
+        }
+        Insert: {
+          actual_jackpot_contribution?: number
+          actual_platform_revenue?: number
+          actual_player_payout?: number
+          batch_name: string
+          created_at?: string
+          games_played?: number
+          id?: string
+          is_active?: boolean
+          jackpot_contribution_target: number
+          platform_revenue_target: number
+          player_payout_target: number
+          total_games: number
+          total_investment: number
+        }
+        Update: {
+          actual_jackpot_contribution?: number
+          actual_platform_revenue?: number
+          actual_player_payout?: number
+          batch_name?: string
+          created_at?: string
+          games_played?: number
+          id?: string
+          is_active?: boolean
+          jackpot_contribution_target?: number
+          platform_revenue_target?: number
+          player_payout_target?: number
+          total_games?: number
+          total_investment?: number
+        }
+        Relationships: []
+      }
+      jackpot_pool: {
+        Row: {
+          current_amount: number
+          id: string
+          last_win_amount: number | null
+          last_win_date: string | null
+          last_winner_id: string | null
+          total_contributions: number
+          total_payouts: number
+          updated_at: string
+        }
+        Insert: {
+          current_amount?: number
+          id?: string
+          last_win_amount?: number | null
+          last_win_date?: string | null
+          last_winner_id?: string | null
+          total_contributions?: number
+          total_payouts?: number
+          updated_at?: string
+        }
+        Update: {
+          current_amount?: number
+          id?: string
+          last_win_amount?: number | null
+          last_win_date?: string | null
+          last_winner_id?: string | null
+          total_contributions?: number
+          total_payouts?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      pre_generated_games: {
+        Row: {
+          actual_payout: number | null
+          actual_score: number | null
+          batch_id: string
+          bet_amount: number
+          expected_payout: number
+          game_index: number
+          id: string
+          is_played: boolean
+          max_achievable_score: number
+          played_at: string | null
+          result_type: Database["public"]["Enums"]["game_result_type"]
+          skill_requirement: number
+          win_multiplier: number | null
+        }
+        Insert: {
+          actual_payout?: number | null
+          actual_score?: number | null
+          batch_id: string
+          bet_amount: number
+          expected_payout: number
+          game_index: number
+          id?: string
+          is_played?: boolean
+          max_achievable_score: number
+          played_at?: string | null
+          result_type: Database["public"]["Enums"]["game_result_type"]
+          skill_requirement?: number
+          win_multiplier?: number | null
+        }
+        Update: {
+          actual_payout?: number | null
+          actual_score?: number | null
+          batch_id?: string
+          bet_amount?: number
+          expected_payout?: number
+          game_index?: number
+          id?: string
+          is_played?: boolean
+          max_achievable_score?: number
+          played_at?: string | null
+          result_type?: Database["public"]["Enums"]["game_result_type"]
+          skill_requirement?: number
+          win_multiplier?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pre_generated_games_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "game_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +195,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      game_result_type: "win" | "loss" | "jackpot"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +322,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      game_result_type: ["win", "loss", "jackpot"],
+    },
   },
 } as const

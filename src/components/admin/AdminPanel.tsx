@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings, DollarSign, Gauge, Volume2 } from 'lucide-react';
+import { Settings, DollarSign, Gauge, Volume2, Database, TrendingUp, Target, Zap } from 'lucide-react';
+import { useGameEconomics } from '@/hooks/useGameEconomics';
+import { toast } from 'sonner';
 
 interface AdminPanelProps {
   onClose: () => void;
@@ -20,6 +22,12 @@ interface GameSettings {
   volumeLevel: number;
 }
 
+interface BatchGenerationForm {
+  batchName: string;
+  totalGames: number;
+  averageBetAmount: number;
+}
+
 export default function AdminPanel({ onClose }: AdminPanelProps) {
   const [settings, setSettings] = useState<GameSettings>({
     initialSpeed: 1000,
@@ -32,6 +40,33 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
 
   const [password, setPassword] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [batchForm, setBatchForm] = useState<BatchGenerationForm>({
+    batchName: '',
+    totalGames: 1000,
+    averageBetAmount: 1000
+  });
+  const [isGenerating, setIsGenerating] = useState(false);
+  
+  const {
+    economicConfig,
+    activeBatch,
+    jackpotPool,
+    fetchEconomicConfig,
+    updateEconomicConfig,
+    fetchActiveBatch,
+    fetchJackpotPool,
+    generateGameBatch,
+    activateBatch
+  } = useGameEconomics();
+
+  // Load data on authentication
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchEconomicConfig();
+      fetchActiveBatch();
+      fetchJackpotPool();
+    }
+  }, [isAuthenticated, fetchEconomicConfig, fetchActiveBatch, fetchJackpotPool]);
 
   const handleAuth = () => {
     if (password === 'admin123') { // In a real app, this would be properly secured
@@ -39,9 +74,48 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     }
   };
 
+  const handleUpdateEconomicConfig = async (field: string, value: number) => {
+    if (!economicConfig) return;
+    
+    const updatedConfig = await updateEconomicConfig({ [field]: value });
+    if (updatedConfig) {
+      toast.success('Configuration économique mise à jour');
+    } else {
+      toast.error('Erreur lors de la mise à jour');
+    }
+  };
+
+  const handleGenerateBatch = async () => {
+    if (!batchForm.batchName.trim()) {
+      toast.error('Veuillez entrer un nom de lot');
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const batch = await generateGameBatch(
+        batchForm.batchName,
+        batchForm.totalGames,
+        batchForm.averageBetAmount
+      );
+      
+      if (batch) {
+        toast.success(`Lot "${batch.batch_name}" généré avec succès!`);
+        setBatchForm({ batchName: '', totalGames: 1000, averageBetAmount: 1000 });
+      } else {
+        toast.error('Erreur lors de la génération du lot');
+      }
+    } catch (error) {
+      console.error('Generation error:', error);
+      toast.error('Erreur lors de la génération');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const handleSave = () => {
     localStorage.setItem('gameSettings', JSON.stringify(settings));
-    // In a real app, this would save to a backend
+    toast.success('Paramètres sauvegardés');
     onClose();
   };
 
@@ -82,20 +156,291 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
 
   return (
     <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <Card className="w-full max-w-6xl max-h-[90vh] overflow-y-auto">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings className="w-5 h-5" />
-            Panneau d'Administration
+            Panneau d'Administration Économique
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="gameplay" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="gameplay">Gameplay</TabsTrigger>
+          <Tabs defaultValue="economics" className="w-full">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="economics">Économie</TabsTrigger>
+              <TabsTrigger value="batches">Lots de Jeu</TabsTrigger>
+              <TabsTrigger value="jackpot">Jackpot</TabsTrigger>
+              <TabsTrigger value="gameplay">Gameplay</TabsTrigger>
               <TabsTrigger value="audio">Audio</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="economics" className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {economicConfig ? (
+                  <>
+                    {/* Distribution des gains */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <TrendingUp className="w-5 h-5" />
+                          Distribution des Gains (%)
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div>
+                          <Label>Part joueurs: {economicConfig.player_share_percentage}%</Label>
+                          <Slider
+                            value={[economicConfig.player_share_percentage]}
+                            onValueChange={([value]) => handleUpdateEconomicConfig('player_share_percentage', value)}
+                            max={80}
+                            min={60}
+                            step={1}
+                          />
+                        </div>
+                        
+                        <div>
+                          <Label>Part plateforme: {economicConfig.platform_share_percentage}%</Label>
+                          <Slider
+                            value={[economicConfig.platform_share_percentage]}
+                            onValueChange={([value]) => handleUpdateEconomicConfig('platform_share_percentage', value)}
+                            max={30}
+                            min={10}
+                            step={1}
+                          />
+                        </div>
+                        
+                        <div>
+                          <Label>Part jackpot: {economicConfig.jackpot_share_percentage}%</Label>
+                          <Slider
+                            value={[economicConfig.jackpot_share_percentage]}
+                            onValueChange={([value]) => handleUpdateEconomicConfig('jackpot_share_percentage', value)}
+                            max={20}
+                            min={5}
+                            step={1}
+                          />
+                        </div>
+                        
+                        <div className="p-3 bg-muted rounded-lg">
+                          <p className="text-sm">
+                            Total: {economicConfig.player_share_percentage + economicConfig.platform_share_percentage + economicConfig.jackpot_share_percentage}%
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Paramètres de gains */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <DollarSign className="w-5 h-5" />
+                          Paramètres de Gains
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div>
+                          <Label>Taux de retour de base: {economicConfig.base_return_rate}</Label>
+                          <Slider
+                            value={[economicConfig.base_return_rate * 1000]}
+                            onValueChange={([value]) => handleUpdateEconomicConfig('base_return_rate', value / 1000)}
+                            max={50}
+                            min={1}
+                            step={1}
+                          />
+                          <div className="text-xs text-muted-foreground">
+                            {economicConfig.base_return_rate.toFixed(4)} EUR pour 1000 points
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <Label>Multiplicateur maximum: {economicConfig.max_win_multiplier}x</Label>
+                          <Slider
+                            value={[economicConfig.max_win_multiplier]}
+                            onValueChange={([value]) => handleUpdateEconomicConfig('max_win_multiplier', value)}
+                            max={50}
+                            min={5}
+                            step={0.5}
+                          />
+                        </div>
+                        
+                        <div>
+                          <Label>Taux de déclenchement jackpot: {(economicConfig.jackpot_trigger_rate * 100).toFixed(3)}%</Label>
+                          <Slider
+                            value={[economicConfig.jackpot_trigger_rate * 100000]}
+                            onValueChange={([value]) => handleUpdateEconomicConfig('jackpot_trigger_rate', value / 100000)}
+                            max={500}
+                            min={10}
+                            step={1}
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </>
+                ) : (
+                  <div className="col-span-2">
+                    <p>Chargement de la configuration économique...</p>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="batches" className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Génération de nouveau lot */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Database className="w-5 h-5" />
+                      Générer un Nouveau Lot
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label htmlFor="batchName">Nom du lot</Label>
+                      <Input
+                        id="batchName"
+                        value={batchForm.batchName}
+                        onChange={(e) => setBatchForm({...batchForm, batchName: e.target.value})}
+                        placeholder="Ex: Lot_2024_001"
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label>Nombre total de parties: {batchForm.totalGames.toLocaleString()}</Label>
+                      <Slider
+                        value={[batchForm.totalGames]}
+                        onValueChange={([value]) => setBatchForm({...batchForm, totalGames: value})}
+                        max={10000}
+                        min={100}
+                        step={100}
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label>Mise moyenne (FCFA): {batchForm.averageBetAmount.toLocaleString()}</Label>
+                      <Slider
+                        value={[batchForm.averageBetAmount]}
+                        onValueChange={([value]) => setBatchForm({...batchForm, averageBetAmount: value})}
+                        max={10000}
+                        min={100}
+                        step={100}
+                      />
+                    </div>
+
+                    <div className="p-4 bg-muted rounded-lg space-y-2">
+                      <h4 className="font-medium">Prévisions du lot:</h4>
+                      <p className="text-sm">Investment total: {(batchForm.totalGames * batchForm.averageBetAmount).toLocaleString()} FCFA</p>
+                      {economicConfig && (
+                        <>
+                          <p className="text-sm text-success">
+                            Gains joueurs: {Math.floor((batchForm.totalGames * batchForm.averageBetAmount * economicConfig.player_share_percentage / 100)).toLocaleString()} FCFA
+                          </p>
+                          <p className="text-sm text-primary">
+                            Revenus plateforme: {Math.floor((batchForm.totalGames * batchForm.averageBetAmount * economicConfig.platform_share_percentage / 100)).toLocaleString()} FCFA
+                          </p>
+                          <p className="text-sm text-accent">
+                            Contribution jackpot: {Math.floor((batchForm.totalGames * batchForm.averageBetAmount * economicConfig.jackpot_share_percentage / 100)).toLocaleString()} FCFA
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    
+                    <Button 
+                      onClick={handleGenerateBatch}
+                      disabled={isGenerating}
+                      className="w-full"
+                    >
+                      {isGenerating ? 'Génération...' : 'Générer le Lot'}
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {/* Lot actif */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Target className="w-5 h-5" />
+                      Lot Actif
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {activeBatch ? (
+                      <div className="space-y-3">
+                        <div>
+                          <h4 className="font-medium">{activeBatch.batch_name}</h4>
+                          <p className="text-sm text-muted-foreground">
+                            {activeBatch.games_played} / {activeBatch.total_games} parties jouées
+                          </p>
+                        </div>
+                        
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-sm">
+                            <span>Progression:</span>
+                            <span>{Math.round((activeBatch.games_played / activeBatch.total_games) * 100)}%</span>
+                          </div>
+                          <div className="w-full bg-muted rounded-full h-2">
+                            <div 
+                              className="bg-primary rounded-full h-2 transition-all"
+                              style={{ width: `${Math.round((activeBatch.games_played / activeBatch.total_games) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="p-2 bg-muted rounded">
+                            <p className="font-medium">Cible gains</p>
+                            <p>{activeBatch.player_payout_target.toLocaleString()}</p>
+                          </div>
+                          <div className="p-2 bg-muted rounded">
+                            <p className="font-medium">Gains réels</p>
+                            <p>{activeBatch.actual_player_payout.toLocaleString()}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">Aucun lot actif</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="jackpot" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Zap className="w-5 h-5" />
+                    Gestion du Jackpot
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {jackpotPool ? (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="p-4 bg-gradient-to-r from-primary/20 to-accent/20 rounded-lg">
+                        <h4 className="font-medium">Montant Actuel</h4>
+                        <p className="text-2xl font-bold text-primary">
+                          {jackpotPool.current_amount.toLocaleString()} FCFA
+                        </p>
+                      </div>
+                      
+                      <div className="p-4 bg-muted rounded-lg">
+                        <h4 className="font-medium">Total Contributions</h4>
+                        <p className="text-xl font-semibold">
+                          {jackpotPool.total_contributions.toLocaleString()} FCFA
+                        </p>
+                      </div>
+                      
+                      <div className="p-4 bg-muted rounded-lg">
+                        <h4 className="font-medium">Total Gains Distribués</h4>
+                        <p className="text-xl font-semibold">
+                          {jackpotPool.total_payouts.toLocaleString()} FCFA
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p>Chargement des données du jackpot...</p>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
 
             <TabsContent value="gameplay" className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -160,37 +505,6 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                       x{settings.softDropMultiplier}
                     </div>
                   </div>
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="economics" className="space-y-6">
-              <div className="space-y-4">
-                <div>
-                  <Label className="flex items-center gap-2 mb-2">
-                    <DollarSign className="w-4 h-4" />
-                    Taux de gain de base (EUR pour 1000 points)
-                  </Label>
-                  <Slider
-                    value={[settings.baseEarningsRate * 1000]}
-                    onValueChange={([value]) => setSettings({...settings, baseEarningsRate: value / 1000})}
-                    max={100}
-                    min={1}
-                    step={1}
-                  />
-                  <div className="text-sm text-muted-foreground mt-1">
-                    {settings.baseEarningsRate.toFixed(3)} EUR pour 1000 points
-                  </div>
-                </div>
-
-                <div className="p-4 bg-muted rounded-lg">
-                  <h4 className="font-semibold mb-2">Exemple de calcul:</h4>
-                  <p className="text-sm">
-                    Score: 10 000 points = {(10 * settings.baseEarningsRate).toFixed(2)} EUR de base
-                  </p>
-                  <p className="text-sm">
-                    Avec multiplicateur x2.5 = {(10 * settings.baseEarningsRate * 2.5).toFixed(2)} EUR
-                  </p>
                 </div>
               </div>
             </TabsContent>
