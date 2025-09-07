@@ -100,15 +100,30 @@ export function useGameEconomics() {
       .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') {
+    if (error) {
       console.error('Error fetching active batch:', error);
       return null;
     }
     
     setActiveBatch(data);
     return data;
+  }, []);
+
+  // Fetch all batches
+  const fetchAllBatches = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('game_batches')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching batches:', error);
+      return [];
+    }
+    
+    return data || [];
   }, []);
 
   // Fetch jackpot pool
@@ -292,6 +307,7 @@ export function useGameEconomics() {
     fetchEconomicConfig,
     updateEconomicConfig,
     fetchActiveBatch,
+    fetchAllBatches,
     fetchJackpotPool,
     generateGameBatch,
     activateBatch,

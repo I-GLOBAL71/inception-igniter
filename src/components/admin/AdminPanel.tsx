@@ -46,6 +46,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     averageBetAmount: 1000
   });
   const [isGenerating, setIsGenerating] = useState(false);
+  const [allBatches, setAllBatches] = useState<any[]>([]);
   
   const {
     economicConfig,
@@ -54,6 +55,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     fetchEconomicConfig,
     updateEconomicConfig,
     fetchActiveBatch,
+    fetchAllBatches,
     fetchJackpotPool,
     generateGameBatch,
     activateBatch
@@ -65,8 +67,14 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
       fetchEconomicConfig();
       fetchActiveBatch();
       fetchJackpotPool();
+      loadAllBatches();
     }
   }, [isAuthenticated, fetchEconomicConfig, fetchActiveBatch, fetchJackpotPool]);
+
+  const loadAllBatches = async () => {
+    const batches = await fetchAllBatches();
+    setAllBatches(batches);
+  };
 
   const handleAuth = () => {
     if (password === 'admin123') { // In a real app, this would be properly secured
@@ -102,6 +110,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
       if (batch) {
         toast.success(`Lot "${batch.batch_name}" généré avec succès!`);
         setBatchForm({ batchName: '', totalGames: 1000, averageBetAmount: 1000 });
+        loadAllBatches(); // Refresh the batch list
       } else {
         toast.error('Erreur lors de la génération du lot');
       }
@@ -401,6 +410,57 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Liste de tous les lots générés */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Tous les Lots Générés</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {allBatches.length > 0 ? (
+                    <div className="space-y-3">
+                      {allBatches.map((batch) => (
+                        <div key={batch.id} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-medium">{batch.batch_name}</h4>
+                              {batch.is_active && (
+                                <span className="px-2 py-1 bg-primary text-primary-foreground text-xs rounded-full">
+                                  Actif
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {batch.total_games.toLocaleString()} parties • {batch.total_investment.toLocaleString()} FCFA
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Créé le {new Date(batch.created_at).toLocaleDateString('fr-FR')}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            {!batch.is_active && (
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  activateBatch(batch.id).then(() => {
+                                    toast.success('Lot activé');
+                                    fetchActiveBatch();
+                                    loadAllBatches();
+                                  });
+                                }}
+                              >
+                                Activer
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground">Aucun lot généré</p>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent value="jackpot" className="space-y-6">
