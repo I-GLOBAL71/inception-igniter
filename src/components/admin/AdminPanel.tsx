@@ -5,9 +5,10 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings, DollarSign, Gauge, Volume2, Database, TrendingUp, Target, Zap } from 'lucide-react';
+import { Settings, DollarSign, Gauge, Volume2, Database, TrendingUp, Target, Zap, Coins, CreditCard, Trophy } from 'lucide-react';
 import { useGameEconomics } from '@/hooks/useGameEconomics';
 import { toast } from 'sonner';
+import { Separator } from '@/components/ui/separator';
 
 interface AdminPanelProps {
   onClose: () => void;
@@ -29,6 +30,10 @@ interface BatchGenerationForm {
 }
 
 export default function AdminPanel({ onClose }: AdminPanelProps) {
+  const [activeTab, setActiveTab] = useState('economics');
+  const [lygosApiKey, setLygosApiKey] = useState('');
+  const [coolpayApiKey, setCoolpayApiKey] = useState('');
+  
   const [settings, setSettings] = useState<GameSettings>({
     initialSpeed: 1000,
     speedIncrease: 100,
@@ -174,10 +179,11 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="economics" className="w-full">
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="economics">Économie</TabsTrigger>
-              <TabsTrigger value="batches">Lots de Jeu</TabsTrigger>
+              <TabsTrigger value="batches">Lots</TabsTrigger>
               <TabsTrigger value="jackpot">Jackpot</TabsTrigger>
+              <TabsTrigger value="payments">Paiements</TabsTrigger>
               <TabsTrigger value="gameplay">Gameplay</TabsTrigger>
               <TabsTrigger value="audio">Audio</TabsTrigger>
             </TabsList>
@@ -467,7 +473,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Zap className="w-5 h-5" />
+                    <Trophy className="w-5 h-5" />
                     Gestion du Jackpot
                   </CardTitle>
                 </CardHeader>
@@ -498,6 +504,116 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                   ) : (
                     <p>Chargement des données du jackpot...</p>
                   )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Payments Tab */}
+            <TabsContent value="payments" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <CreditCard className="w-5 h-5 mr-2 text-primary" />
+                    Configuration des Agrégateurs de Paiement
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Configurez les clés API pour les partenaires de paiement intégrés
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  
+                  {/* Lygos App */}
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center">
+                        <span className="text-xs font-bold">L</span>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold">Lygos App</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Gateway de paiement principal
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="grid gap-3">
+                      <div>
+                        <Label htmlFor="lygos-api">Clé API Lygos</Label>
+                        <Input
+                          id="lygos-api"
+                          type="password"
+                          value={lygosApiKey}
+                          onChange={(e) => setLygosApiKey(e.target.value)}
+                          placeholder="Entrez votre clé API Lygos"
+                        />
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button size="sm" className="flex-1">
+                          Sauvegarder
+                        </Button>
+                        <Button size="sm" variant="outline">
+                          Tester la connexion
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <p>• Endpoints supportés: Create Gateway, Get Gateway, Update Gateway</p>
+                      <p>• Documentation: <a href="https://docs.lygosapp.com" className="text-primary hover:underline" target="_blank" rel="noopener">docs.lygosapp.com</a></p>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* My-CoolPay */}
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-8 h-8 bg-secondary/20 rounded-lg flex items-center justify-center">
+                        <span className="text-xs font-bold">C</span>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold">My-CoolPay</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Processeur de paiement secondaire
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="grid gap-3">
+                      <div>
+                        <Label htmlFor="coolpay-api">Clé API CoolPay</Label>
+                        <Input
+                          id="coolpay-api"
+                          type="password"
+                          value={coolpayApiKey}
+                          onChange={(e) => setCoolpayApiKey(e.target.value)}
+                          placeholder="Entrez votre clé API CoolPay"
+                        />
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button size="sm" className="flex-1">
+                          Sauvegarder
+                        </Button>
+                        <Button size="sm" variant="outline">
+                          Tester la connexion
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <p>• API RESTful avec authentification par clé</p>
+                      <p>• Documentation: <a href="https://documenter.getpostman.com/view/17178321/UV5ZCx8f" className="text-primary hover:underline" target="_blank" rel="noopener">Postman Collection</a></p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-accent/10 border border-accent/30 rounded-lg">
+                    <h4 className="font-semibold text-accent mb-2">Configuration Requise</h4>
+                    <div className="text-sm text-muted-foreground space-y-1">
+                      <p>• Au moins un agrégateur doit être configuré pour les paiements réels</p>
+                      <p>• Les clés sont chiffrées et stockées de manière sécurisée</p>
+                      <p>• Testez toujours les connexions après la configuration</p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>

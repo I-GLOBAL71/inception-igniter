@@ -4,13 +4,13 @@ import { ArrowLeft, Trophy, Target, Zap, TrendingUp, Settings } from 'lucide-rea
 import BettingScreen from '@/components/game/BettingScreen';
 import TetrisBoard from '@/components/tetris/TetrisBoard';
 import AdminPanel from '@/components/admin/AdminPanel';
-import LandingOverlay from '@/components/game/LandingOverlay';
+import CombinedStartScreen from '@/components/game/CombinedStartScreen';
 import { useCurrency } from '@/hooks/useCurrency';
 
-type GameState = 'landing' | 'betting' | 'playing';
+type GameState = 'start' | 'playing';
 
 const Index = () => {
-  const [gameState, setGameState] = useState<GameState>('landing');
+  const [gameState, setGameState] = useState<GameState>('start');
   const [score, setScore] = useState(0);
   const [lines, setLines] = useState(0);
   const [balance] = useState(25000);
@@ -33,47 +33,19 @@ const Index = () => {
 
   const handleRealPlay = () => {
     setIsDemo(false);
-    setGameState('betting');
+    setGameState('start');
   };
 
-  const handleBackToBetting = () => {
-    setGameState('betting');
+  const handleBackToStart = () => {
+    setGameState('start');
     setScore(0);
     setLines(0);
   };
 
-  const handleStartDemo = () => {
-    setIsDemo(true);
-    setGameState('betting');
-  };
-
-  const handleStartReal = () => {
-    setIsDemo(false);
-    setGameState('betting');
-  };
-
-  if (gameState === 'landing') {
+  if (gameState === 'start') {
     return (
-      <div className="h-screen bg-background overflow-hidden">
-        {/* Background Game Preview */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-30">
-          <TetrisBoard onScoreChange={() => {}} onLinesChange={() => {}} isDemo={true} />
-        </div>
-        
-        {/* Landing Overlay */}
-        <LandingOverlay 
-          onStartDemo={handleStartDemo}
-          onStartReal={handleStartReal}
-        />
-      </div>
-    );
-  }
-
-  if (gameState === 'betting') {
-    return (
-      <BettingScreen 
+      <CombinedStartScreen 
         balance={balance} 
-        demoMode={isDemo} 
         onStartGame={handleStartGame} 
       />
     );
@@ -83,14 +55,14 @@ const Index = () => {
     <div className="h-screen bg-background overflow-hidden">
       {/* Mobile Header */}
       <div className="lg:hidden flex items-center justify-between p-4 bg-surface/30 backdrop-blur-sm border-b border-border">
-        <Button
-          onClick={handleBackToBetting}
-          variant="ghost"
-          size="sm"
-          className="p-2"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </Button>
+          <Button
+            onClick={handleBackToStart}
+            variant="ghost"
+            size="sm"
+            className="p-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
         <div className="flex items-center space-x-2">
           <Trophy className="w-5 h-5 text-primary" />
           <span className="font-bold gaming-text-gradient">GameWin</span>
@@ -131,7 +103,7 @@ const Index = () => {
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <Button
-              onClick={handleBackToBetting}
+              onClick={handleBackToStart}
               variant="ghost"
               size="sm"
               className="p-2"
