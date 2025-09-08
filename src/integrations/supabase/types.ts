@@ -98,6 +98,56 @@ export type Database = {
         }
         Relationships: []
       }
+      game_sessions: {
+        Row: {
+          bet_amount: number
+          completed_at: string | null
+          created_at: string
+          game_id: string
+          id: string
+          is_demo: boolean
+          payout_amount: number | null
+          score: number | null
+          started_at: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          bet_amount: number
+          completed_at?: string | null
+          created_at?: string
+          game_id: string
+          id?: string
+          is_demo?: boolean
+          payout_amount?: number | null
+          score?: number | null
+          started_at?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          bet_amount?: number
+          completed_at?: string | null
+          created_at?: string
+          game_id?: string
+          id?: string
+          is_demo?: boolean
+          payout_amount?: number | null
+          score?: number | null
+          started_at?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_sessions_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "pre_generated_games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       jackpot_pool: {
         Row: {
           current_amount: number
@@ -186,6 +236,128 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string | null
+          full_name: string | null
+          id: string
+          kyc_verified: boolean | null
+          phone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          kyc_verified?: boolean | null
+          phone?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          kyc_verified?: boolean | null
+          phone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          external_transaction_id: string | null
+          game_id: string | null
+          id: string
+          metadata: Json | null
+          payment_gateway: string | null
+          payment_method: string | null
+          status: string
+          type: string
+          updated_at: string
+          user_id: string
+          wallet_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          currency?: string
+          external_transaction_id?: string | null
+          game_id?: string | null
+          id?: string
+          metadata?: Json | null
+          payment_gateway?: string | null
+          payment_method?: string | null
+          status?: string
+          type: string
+          updated_at?: string
+          user_id: string
+          wallet_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          external_transaction_id?: string | null
+          game_id?: string | null
+          id?: string
+          metadata?: Json | null
+          payment_gateway?: string | null
+          payment_method?: string | null
+          status?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+          wallet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wallets: {
+        Row: {
+          balance: number
+          created_at: string
+          currency: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {
