@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Trophy, Play, Coins, Gift } from 'lucide-react';
+import { Trophy, Play, Coins, Gift, User, Wallet } from 'lucide-react';
 import { useCurrency } from '@/hooks/useCurrency';
+import { useAuth } from '@/hooks/useAuth';
+import AuthModal from '@/components/auth/AuthModal';
+import WalletModal from '@/components/wallet/WalletModal';
 
 interface CombinedStartScreenProps {
   balance: number;
@@ -15,9 +18,17 @@ const BET_AMOUNTS = [100, 500, 1000, 2500, 5000, 10000];
 export default function CombinedStartScreen({ balance, onStartGame }: CombinedStartScreenProps) {
   const [selectedBet, setSelectedBet] = useState(500);
   const [demoMode, setDemoMode] = useState(true);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showWalletModal, setShowWalletModal] = useState(false);
   const { formatAmount } = useCurrency();
+  const { user, loading: authLoading } = useAuth();
 
   const handleStartGame = () => {
+    // Si mode réel mais pas connecté, ouvrir l'authentification
+    if (!demoMode && !user) {
+      setShowAuthModal(true);
+      return;
+    }
     onStartGame(selectedBet, demoMode);
   };
 
@@ -44,6 +55,40 @@ export default function CombinedStartScreen({ balance, onStartGame }: CombinedSt
             <p className="text-xs text-muted-foreground">Gagnez de l'argent réel !</p>
           </div>
         </div>
+
+        {/* User Actions */}
+        <div className="flex items-center gap-2">
+          {user ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowWalletModal(true)}
+                className="h-9"
+              >
+                <Wallet className="w-4 h-4 mr-1" />
+                Wallet
+              </Button>
+              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                <User className="w-4 h-4 text-primary" />
+              </div>
+            </>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAuthModal(true)}
+              className="h-9"
+            >
+              <User className="w-4 h-4 mr-1" />
+              Connexion
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-center p-2 border-b border-border">
+        <div className="flex items-center space-x-3">{/* Extra space for balance or other info */}</div>
         
         {/* Mode Toggle - Plus intuitif */}
         <div className="flex rounded-lg bg-muted p-1">
@@ -139,21 +184,37 @@ export default function CombinedStartScreen({ balance, onStartGame }: CombinedSt
         <Button
           onClick={handleStartGame}
           className="w-full h-14 text-lg font-bold gaming-button-primary"
-          disabled={selectedBet > balance && !demoMode}
+          disabled={(selectedBet > balance && !demoMode) || authLoading}
         >
           <Play className="w-5 h-5 mr-2" />
-          {demoMode ? 'JOUER EN DÉMO' : 'JOUER AVEC ARGENT RÉEL'}
+          {demoMode ? 'JOUER EN DÉMO' : (user ? 'JOUER AVEC ARGENT RÉEL' : 'SE CONNECTER ET JOUER')}
         </Button>
 
         {/* Notice selon le mode */}
         <div className="text-center text-xs text-muted-foreground">
           {demoMode ? (
             <p>💡 Mode démo : Découvrez le jeu sans risque</p>
-          ) : (
+          ) : user ? (
             <p>🔒 Paiements 100% sécurisés</p>
+          ) : (
+            <p>🔐 Connectez-vous pour jouer avec de l'argent réel</p>
           )}
         </div>
       </div>
+
+      {/* Modals */}
+      <AuthModal 
+        isOpen={showAuthModal} 
+        onClose={() => setShowAuthModal(false)} 
+      />
+      
+      {user && (
+        <WalletModal 
+          isOpen={showWalletModal} 
+          onClose={() => setShowWalletModal(false)}
+          userId={user.id}
+        />
+      )}
     </div>
   );
 }

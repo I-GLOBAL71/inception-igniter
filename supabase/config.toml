@@ -1,1 +1,7 @@
 project_id = "lrdshbnpkjdrydfcjcnv"
+
+[functions.lygos-payment]
+verify_jwt = false
+
+[functions.mycoolpay-payment]
+verify_jwt = false
