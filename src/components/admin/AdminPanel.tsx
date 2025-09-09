@@ -127,6 +127,29 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     }
   };
 
+  const handleSaveApiKeys = async () => {
+    try {
+      // Save Lygos API key
+      if (apiKeys.lygos) {
+        await supabase
+          .from('admin_settings')
+          .upsert({ key: 'lygos_api_key', value: apiKeys.lygos });
+      }
+      
+      // Save MyCoolPay API key  
+      if (apiKeys.mycoolpay) {
+        await supabase
+          .from('admin_settings')
+          .upsert({ key: 'mycoolpay_api_key', value: apiKeys.mycoolpay });
+      }
+      
+      toast.success('Clés API sauvegardées avec succès');
+    } catch (error) {
+      console.error('Error saving API keys:', error);
+      toast.error('Erreur lors de la sauvegarde');
+    }
+  };
+
   const handleSave = () => {
     localStorage.setItem('gameSettings', JSON.stringify(settings));
     toast.success('Paramètres sauvegardés');
