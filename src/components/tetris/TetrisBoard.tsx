@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Play, Pause, RotateCcw } from 'lucide-react';
-import { useSound } from '@/hooks/useSound';
 import LineEffect from '@/components/game/LineEffect';
 import DemoResultModal from '@/components/game/DemoResultModal';
+import { GameSettings } from '@/hooks/useGameSettings';
 
 // Tetris piece definitions
 const PIECES = {
@@ -18,17 +18,36 @@ const PIECES = {
 
 const BOARD_WIDTH = 10;
 const BOARD_HEIGHT = 20;
-const INITIAL_SPEED = 1000;
+const CELL_SIZE = 24; // Corresponds to w-6/h-6 in Tailwind
 
 interface TetrisBoardProps {
   onScoreChange?: (score: number) => void;
   onLinesChange?: (lines: number) => void;
   isDemo?: boolean;
-  onRealPlay?: () => void;
+  onGameOver: (score: number) => void;
+  playMove: () => void;
+  playRotate: () => void;
+  playDrop: () => void;
+  playLineClear: (lines: number) => void;
+  playGameOver: () => void;
+  playDebrisFall: () => void;
+  gameSettings: GameSettings;
 }
 
-export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = false, onRealPlay }: TetrisBoardProps) {
-  const [board, setBoard] = useState<(string | null)[][]>(() => 
+export default function TetrisBoard({
+  onScoreChange,
+  onLinesChange,
+  isDemo = false,
+  onGameOver,
+  playMove,
+  playRotate,
+  playDrop,
+  playLineClear,
+  playGameOver,
+  playDebrisFall,
+  gameSettings
+}: TetrisBoardProps) {
+  const [board, setBoard] = useState<(string | null)[][]>(() =>
     Array(BOARD_HEIGHT).fill(null).map(() => Array(BOARD_WIDTH).fill(null))
   );
   const [currentPiece, setCurrentPiece] = useState<any>(null);
@@ -37,8 +56,8 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
   const [level, setLevel] = useState(1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [gameOver, setGameOver] = useState(false);
-  const [dropSpeed, setDropSpeed] = useState(INITIAL_SPEED);
-  const [clearingLines, setClearingLines] = useState<number[]>([]);
+  const [dropSpeed, setDropSpeed] = useState(gameSettings.initialSpeed || 1000);
+  const [linesToAnimate, setLinesToAnimate] = useState<{ y: number; row: (string | number)[] }[]>([]);
   const [showDemoResult, setShowDemoResult] = useState(false);
   const [multiplier, setMultiplier] = useState(1);
   const [fastDrop, setFastDrop] = useState(false);
@@ -46,7 +65,8 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
   const gameLoopRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const boardRef = useRef<HTMLDivElement | null>(null);
-  const { playMove, playRotate, playDrop, playLineClear, playGameOver } = useSound();
+  const scoreRef = useRef<HTMLDivElement | null>(null);
+  const [scorePosition, setScorePosition] = useState<{ x: number; y: number } | null>(null);
 
   // Generate random piece
   const generatePiece = useCallback(() => {
@@ -120,69 +140,47 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
 
   // Clear completed lines with effects
   const clearLines = useCallback((boardState: (string | null)[][]) => {
-    const linesToClear = findLinesToClear(boardState);
+    const linesToClearIndices = findLinesToClear(boardState);
     
-    if (linesToClear.length > 0) {
-      setClearingLines(linesToClear);
-      playLineClear(linesToClear.length);
+    if (linesToClearIndices.length > 0) {
+      // Trigger animation
+      const linesData = linesToClearIndices.map(y => ({ y, row: boardState[y] as (string|number)[] }));
+      setLinesToAnimate(linesData);
+      playLineClear(linesToClearIndices.length);
       
-      // Calculate multiplier based on combo and consecutive clears
-      const newMultiplier = Math.min(5, multiplier + (linesToClear.length === 4 ? 0.5 : 0.2));
-      setMultiplier(newMultiplier);
-      
-      return boardState; // Return unchanged board during effect
-    }
-    
-    return boardState;
-  }, [findLinesToClear, playLineClear, multiplier]);
+      // Update score and level immediately
+      const clearedLinesCount = linesToClearIndices.length;
+      const newLines = lines + clearedLinesCount;
+      const newScore = score + clearedLinesCount * 100 * level * multiplier;
+      const newLevel = Math.floor(newLines / 10) + 1;
+      const newMultiplier = Math.min(5, multiplier + (clearedLinesCount === 4 ? 0.5 : 0.2));
 
-  // Actually remove the lines after effect
-  const executeLineClear = useCallback(() => {
-    if (clearingLines.length === 0) return;
-    
-    setBoard(prevBoard => {
-      const newBoard = prevBoard.filter((_, index) => !clearingLines.includes(index));
-      
-      // Add empty rows at the top
+      setLines(newLines);
+      setScore(newScore);
+      setLevel(newLevel);
+      setMultiplier(newMultiplier);
+      onLinesChange?.(newLines);
+      onScoreChange?.(newScore);
+
+      // Update board state immediately
+      const newBoard = boardState.filter((_, index) => !linesToClearIndices.includes(index));
       while (newBoard.length < BOARD_HEIGHT) {
         newBoard.unshift(Array(BOARD_WIDTH).fill(null));
       }
       
-      const clearedLines = clearingLines.length;
-      const newLines = lines + clearedLines;
-      const newScore = score + clearedLines * 100 * level * multiplier;
-      const newLevel = Math.floor(newLines / 10) + 1;
-      
-      setLines(newLines);
-      setScore(newScore);
-      setLevel(newLevel);
-      
-      // Get speed settings from localStorage or use defaults
-      const savedSettings = localStorage.getItem('gameSettings');
-      const settings = savedSettings ? JSON.parse(savedSettings) : { 
-        initialSpeed: INITIAL_SPEED, 
-        speedIncrease: 100,
-        fastDropMultiplier: 20,
-        softDropMultiplier: 3
-      };
-      
-      setDropSpeed(Math.max(100, settings.initialSpeed - (newLevel - 1) * settings.speedIncrease));
-      
-      onLinesChange?.(newLines);
-      onScoreChange?.(newScore);
-      
+      setDropSpeed(Math.max(100, (gameSettings.initialSpeed || 1000) - (newLevel - 1) * (gameSettings.speedIncrease || 100)));
+
+      playDebrisFall();
       return newBoard;
-    });
+    }
     
-    setClearingLines([]);
-  }, [clearingLines, lines, score, level, multiplier, onLinesChange, onScoreChange]);
+    return boardState;
+  }, [findLinesToClear, playLineClear, playDebrisFall, lines, score, level, multiplier, onLinesChange, onScoreChange]);
 
   // Game loop
   const gameLoop = useCallback(() => {
-    if (!currentPiece || gameOver || clearingLines.length > 0) return;
+    if (!currentPiece || gameOver) return;
 
-    const speedMultiplier = fastDrop ? 20 : 1;
-    
     if (isValidMove(currentPiece, currentPiece.x, currentPiece.y + 1)) {
       setCurrentPiece(prev => ({ ...prev, y: prev.y + 1 }));
     } else {
@@ -190,8 +188,8 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
       
       // Place piece and generate new one
       const newBoard = placePiece(currentPiece);
-      clearLines(newBoard);
-      setBoard(newBoard);
+      const boardAfterClear = clearLines(newBoard);
+      setBoard(boardAfterClear);
       
       const newPiece = generatePiece();
       
@@ -201,19 +199,17 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
         setIsPlaying(false);
         playGameOver();
         
-        if (isDemo) {
-          setShowDemoResult(true);
-        }
+        onGameOver(score);
         return;
       }
       
       setCurrentPiece(newPiece);
     }
-  }, [currentPiece, gameOver, clearingLines, fastDrop, isValidMove, placePiece, clearLines, generatePiece, playDrop, playGameOver, isDemo]);
+  }, [currentPiece, gameOver, linesToAnimate, fastDrop, isValidMove, placePiece, clearLines, generatePiece, playDrop, playGameOver, isDemo]);
 
   // Move piece
   const movePiece = useCallback((dx: number, dy: number) => {
-    if (!currentPiece || gameOver || clearingLines.length > 0) return;
+    if (!currentPiece || gameOver) return;
     
     const newX = currentPiece.x + dx;
     const newY = currentPiece.y + dy;
@@ -223,22 +219,23 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
       if (dx !== 0) playMove();
       if (dy > 0) setFastDrop(true);
     }
-  }, [currentPiece, gameOver, clearingLines, isValidMove, playMove]);
+  }, [currentPiece, gameOver, linesToAnimate, isValidMove, playMove]);
 
   // Rotate current piece
   const rotate = useCallback(() => {
-    if (!currentPiece || gameOver || clearingLines.length > 0) return;
+    if (!currentPiece || gameOver) return;
     
     const rotatedShape = rotatePiece(currentPiece);
     if (isValidMove(currentPiece, currentPiece.x, currentPiece.y, rotatedShape)) {
       setCurrentPiece(prev => ({ ...prev, shape: rotatedShape }));
       playRotate();
     }
-  }, [currentPiece, gameOver, clearingLines, rotatePiece, isValidMove, playRotate]);
+  }, [currentPiece, gameOver, linesToAnimate, rotatePiece, isValidMove, playRotate]);
 
   // Touch controls
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (e.cancelable) e.preventDefault();
+    // The native listener handles prevention for dragging, so this is not needed here.
+    // if (e.cancelable) e.preventDefault();
     const touch = e.touches[0];
     touchStartRef.current = { x: touch.clientX, y: touch.clientY };
   }, []);
@@ -294,7 +291,7 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
       setScore(0);
       setLines(0);
       setLevel(1);
-      setDropSpeed(INITIAL_SPEED);
+      setDropSpeed(gameSettings.initialSpeed || 1000);
       setGameOver(false);
       setCurrentPiece(generatePiece());
       onScoreChange?.(0);
@@ -313,8 +310,9 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
 
   // Game loop effect
   useEffect(() => {
-    if (isPlaying && !gameOver && clearingLines.length === 0) {
-      const currentSpeed = fastDrop ? Math.max(50, dropSpeed / 20) : dropSpeed;
+    if (isPlaying && !gameOver) {
+      const fastDropMultiplier = gameSettings.fastDropMultiplier || 20;
+      const currentSpeed = fastDrop ? Math.max(50, dropSpeed / fastDropMultiplier) : dropSpeed;
       gameLoopRef.current = setInterval(gameLoop, currentSpeed);
     } else if (gameLoopRef.current) {
       clearInterval(gameLoopRef.current);
@@ -325,12 +323,12 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
         clearInterval(gameLoopRef.current);
       }
     };
-  }, [isPlaying, gameOver, gameLoop, dropSpeed, fastDrop, clearingLines]);
+  }, [isPlaying, gameOver, gameLoop, dropSpeed, fastDrop, linesToAnimate]);
 
   // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isPlaying || gameOver || clearingLines.length > 0) return;
+      if (!isPlaying || gameOver) return;
       
       switch (e.key) {
         case 'ArrowLeft':
@@ -366,7 +364,7 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [isPlaying, gameOver, clearingLines, movePiece, rotate]);
+  }, [isPlaying, gameOver, linesToAnimate, movePiece, rotate]);
 
   // Native non-passive touch listeners to prevent pull-to-refresh only on drag down
   useEffect(() => {
@@ -412,6 +410,17 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
     };
   }, []);
 
+  useEffect(() => {
+    if (scoreRef.current && boardRef.current) {
+      const scoreRect = scoreRef.current.getBoundingClientRect();
+      const boardRect = boardRef.current.getBoundingClientRect();
+      setScorePosition({
+        x: scoreRect.left - boardRect.left + scoreRect.width / 2,
+        y: scoreRect.top - boardRect.top + scoreRect.height / 2,
+      });
+    }
+  }, [scoreRef.current, boardRef.current]);
+
   // Render the game board with current piece
   const renderBoard = () => {
     const displayBoard = board.map(row => [...row]);
@@ -420,8 +429,15 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
     if (currentPiece) {
       for (let y = 0; y < currentPiece.shape.length; y++) {
         for (let x = 0; x < currentPiece.shape[y].length; x++) {
-          if (currentPiece.shape[y][x] && currentPiece.y + y >= 0) {
-            displayBoard[currentPiece.y + y][currentPiece.x + x] = currentPiece.color;
+          if (currentPiece.shape[y][x]) {
+            const boardY = currentPiece.y + y;
+            const boardX = currentPiece.x + x;
+            if (
+              boardY >= 0 && boardY < BOARD_HEIGHT &&
+              boardX >= 0 && boardX < BOARD_WIDTH
+            ) {
+              displayBoard[boardY][boardX] = currentPiece.color;
+            }
           }
         }
       }
@@ -443,13 +459,15 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
     );
   };
 
+  const onLineEffectComplete = useCallback(() => setLinesToAnimate([]), []);
+
   return (
     <>
-      <div className="flex flex-col items-center min-h-[100dvh] justify-between" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div className="flex flex-col items-center h-full justify-between" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {/* Mobile Stats - Fixed at top */}
         <div className="lg:hidden w-full px-4 py-2 bg-background/80 backdrop-blur-sm border-b border-border">
           <div className="flex justify-between items-center text-sm">
-            <div className="text-center">
+            <div className="text-center" ref={scoreRef}>
               <div className="gaming-text-gradient font-bold">{score.toLocaleString()}</div>
               <div className="text-xs text-muted-foreground">Score</div>
             </div>
@@ -488,7 +506,7 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
 
         {/* Desktop Game Status */}
         <div className="hidden lg:flex gap-6 text-center mb-4">
-          <div className="gaming-card px-4 py-2">
+          <div className="gaming-card px-4 py-2" ref={scoreRef}>
             <div className="text-sm text-muted-foreground">Score</div>
             <div className="text-lg font-bold gaming-text-gradient">{score.toLocaleString()}</div>
           </div>
@@ -507,33 +525,37 @@ export default function TetrisBoard({ onScoreChange, onLinesChange, isDemo = fal
         </div>
 
         {/* Game Board - Adjusted for mobile visibility */}
-        <div className="flex-1 flex items-end justify-center w-full px-2 pb-8">
-          <div 
+        <div className="flex-1 flex items-center justify-center w-full p-2">
+          <div
             ref={boardRef}
-            className="game-board relative select-none max-w-full touch-none overscroll-contain"
+            className="game-board relative select-none w-full h-full flex items-center justify-center touch-none overscroll-contain"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
             onClick={handleTap}
           >
-            <div 
-              className="grid gap-0.5 p-2 bg-surface/40 rounded-lg border border-border"
-              style={{ 
+            <div
+              className="grid gap-0.5 p-1 bg-surface/40 rounded-lg border border-border"
+              style={{
                 gridTemplateColumns: `repeat(${BOARD_WIDTH}, 1fr)`,
                 gridTemplateRows: `repeat(${BOARD_HEIGHT}, 1fr)`,
                 aspectRatio: '10 / 20',
-                width: 'min(90vw, calc((100dvh - 200px) * 0.5))',
-                maxHeight: 'calc(100dvh - 180px)'
+                maxHeight: '100%',
+                maxWidth: '100%',
               }}
             >
               {renderBoard()}
             </div>
             
             {/* Line clearing effects */}
-            <LineEffect 
-              lines={clearingLines} 
-              onComplete={executeLineClear}
-            />
+            {linesToAnimate.length > 0 && scorePosition && (
+              <LineEffect
+                clearedLines={linesToAnimate}
+                onComplete={onLineEffectComplete}
+                cellSize={CELL_SIZE}
+                targetPosition={scorePosition}
+              />
+            )}
             
             {gameOver && !showDemoResult && (
               <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm rounded-lg">

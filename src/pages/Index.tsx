@@ -1,34 +1,85 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Trophy, Target, Zap, TrendingUp, Settings } from 'lucide-react';
-import BettingScreen from '@/components/game/BettingScreen';
+import { ArrowLeft, Trophy, Settings, Volume2, VolumeX } from 'lucide-react';
 import TetrisBoard from '@/components/tetris/TetrisBoard';
 import AdminPanel from '@/components/admin/AdminPanel';
 import CombinedStartScreen from '@/components/game/CombinedStartScreen';
-import { useCurrency } from '@/hooks/useCurrency';
+import GameResultModal from '@/components/game/DemoResultModal';
+import { useCurrency } from '@/hooks/useCurrency.tsx';
+import { useSound } from '@/hooks/useSound.tsx';
+import { useGameSettings } from '@/hooks/useGameSettings';
+import { useAuth } from '@/hooks/useAuth';
+import { useWallet } from '@/hooks/useWallet';
+import { useRealMoneyGame } from '@/hooks/useRealMoneyGame';
 
-type GameState = 'start' | 'playing';
+type GameState = 'start' | 'playing' | 'gameOver';
+type GameResult = {
+  payout: number;
+  isWin: boolean;
+  isJackpot: boolean;
+} | null;
 
 const Index = () => {
+  const { settings, isLoading } = useGameSettings();
+  const {
+    enabled,
+    setEnabled,
+    isPreloading,
+    playMove,
+    playRotate,
+    playDrop,
+    playLineClear,
+    playGameOver,
+    playDebrisFall,
+    setVolume
+  } = useSound();
+  const { user } = useAuth();
+  const { wallet } = useWallet(user?.id);
+  const { startRealMoneyGame, completeRealMoneyGame } = useRealMoneyGame(user?.id);
+
   const [gameState, setGameState] = useState<GameState>('start');
   const [score, setScore] = useState(0);
   const [lines, setLines] = useState(0);
-  const [balance] = useState(25000);
   const [isDemo, setIsDemo] = useState(true);
   const [currentBet, setCurrentBet] = useState(0);
   const [showAdmin, setShowAdmin] = useState(false);
-  const { formatAmount } = useCurrency();
+  const [gameSession, setGameSession] = useState<any>(null);
+  const [gameResult, setGameResult] = useState<GameResult>(null);
+  const { formatAmount, convertFromEUR } = useCurrency();
+
+  const balance = isDemo ? 25000 : (wallet?.balance ?? 0);
+
+  useEffect(() => {
+    if (settings?.volumeLevel) {
+      setVolume(settings.volumeLevel);
+    }
+  }, [settings?.volumeLevel, setVolume]);
 
   // Calculate earnings and multiplier based on bet
-  const multiplier = isDemo ? 2.5 : 1.0 + (currentBet / 10000);
-  const earnings = isDemo ? Math.floor(score * 0.5) : Math.floor(score * 0.1);
+  const earnings = settings?.base_return_rate ? convertFromEUR((score / 1000) * settings.base_return_rate) : 0;
 
-  const handleStartGame = (betAmount: number, demo: boolean = true) => {
-    setCurrentBet(betAmount);
-    setIsDemo(demo);
+  const handleStartGame = async (betAmount: number, demo: boolean = true) => {
     setScore(0);
     setLines(0);
-    setGameState('playing');
+    setCurrentBet(betAmount);
+    setIsDemo(demo);
+    setGameResult(null);
+
+    const session = await startRealMoneyGame(betAmount, demo);
+    if (session) {
+      setGameSession(session);
+      setGameState('playing');
+    }
+  };
+
+  const handleGameOver = async (finalScore: number) => {
+    if (!gameSession) return;
+
+    const result = await completeRealMoneyGame(finalScore, gameSession.id, isDemo);
+    if (result) {
+      setGameResult(result);
+    }
+    setGameState('gameOver');
   };
 
   const handleRealPlay = () => {
@@ -40,202 +91,171 @@ const Index = () => {
     setGameState('start');
     setScore(0);
     setLines(0);
+    setGameResult(null);
   };
+
+
+  if (isLoading || !settings) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-background">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold gaming-text-gradient mb-4">PrimeGems</h1>
+          <p className="text-muted-foreground">Chargement des paramètres du jeu...</p>
+        </div>
+      </div>
+    );
+  }
+
 
   if (gameState === 'start') {
     return (
-      <CombinedStartScreen 
-        balance={balance} 
-        onStartGame={handleStartGame} 
+      <CombinedStartScreen
+        balance={balance}
+        onStartGame={handleStartGame}
+        isDemo={isDemo}
+        onModeChange={setIsDemo}
+      />
+    );
+  }
+
+  if (gameState === 'gameOver' && gameResult) {
+    return (
+      <GameResultModal
+        isOpen={true}
+        score={score}
+        payout={gameResult.payout}
+        isWin={gameResult.isWin}
+        isJackpot={gameResult.isJackpot}
+        onPlayAgain={() => handleStartGame(currentBet, isDemo)}
+        onPlayReal={handleRealPlay}
+        onClose={handleBackToStart}
+        isDemo={isDemo}
       />
     );
   }
 
   return (
-    <div className="h-screen bg-background overflow-hidden">
-      {/* Mobile Header */}
-      <div className="lg:hidden flex items-center justify-between p-4 bg-surface/30 backdrop-blur-sm border-b border-border">
-          <Button
-            onClick={handleBackToStart}
-            variant="ghost"
-            size="sm"
-            className="p-2"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
+      {/* Unified Header */}
+      <header className="flex items-center justify-between p-4 bg-surface/30 backdrop-blur-sm border-b border-border flex-shrink-0">
+        <Button
+          onClick={handleBackToStart}
+          variant="ghost"
+          size="icon"
+          className="w-8 h-8"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </Button>
         <div className="flex items-center space-x-2">
           <Trophy className="w-5 h-5 text-primary" />
           <span className="font-bold gaming-text-gradient">GameWin</span>
         </div>
-        <div className="text-right">
-          <div className="text-sm font-bold text-primary">
-            {currentBet.toLocaleString()} FCFA
-          </div>
-          {isDemo && (
-            <div className="text-xs text-accent">x{multiplier}</div>
-          )}
+        <div className="text-sm font-bold text-secondary w-28 text-right">
+          {formatAmount(balance)}
         </div>
-      </div>
+        <Button onClick={() => setEnabled(!enabled)} variant="ghost" size="icon">
+          {enabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+        </Button>
+      </header>
 
       {/* Mobile Stats Bar */}
-      <div className="lg:hidden flex justify-between p-2 bg-surface/20 border-b border-border text-center">
-        <div className="flex-1">
+      <div className="lg:hidden grid grid-cols-4 gap-2 p-2 bg-surface/20 border-b border-border text-center">
+        <div>
+          <div className="text-xs text-muted-foreground">Mise</div>
+          <div className="text-sm font-bold text-primary">{formatAmount(currentBet)}</div>
+        </div>
+        <div>
           <div className="text-xs text-muted-foreground">Score</div>
           <div className="text-sm font-bold text-primary">{score.toLocaleString()}</div>
         </div>
-        <div className="flex-1">
+        <div>
           <div className="text-xs text-muted-foreground">Lignes</div>
           <div className="text-sm font-bold text-accent">{lines}</div>
         </div>
-        <div className="flex-1">
+        <div>
           <div className="text-xs text-muted-foreground">Gains</div>
-          <div className="text-sm font-bold text-success">{earnings.toLocaleString()}</div>
-        </div>
-        <div className="flex-1">
-          <div className="text-xs text-muted-foreground">Solde</div>
-          <div className="text-sm font-bold text-secondary">{balance.toLocaleString()}</div>
+          <div className="text-sm font-bold text-success">{formatAmount(earnings)}</div>
         </div>
       </div>
 
-      <div className="flex h-full lg:h-screen">
-        {/* Desktop Left Sidebar - Stats */}
-        <div className="hidden lg:flex w-80 bg-surface/30 backdrop-blur-sm border-r border-border p-6 flex-col">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <Button
-              onClick={handleBackToStart}
-              variant="ghost"
-              size="sm"
-              className="p-2"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-            <div className="flex items-center space-x-2">
-              <Trophy className="w-5 h-5 text-primary" />
-              <span className="font-bold gaming-text-gradient">GameWin</span>
-            </div>
-          </div>
-
+      {/* Main Content */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Desktop Sidebar - Stats Panel */}
+        <aside className="hidden lg:flex w-80 bg-surface/30 backdrop-blur-sm border-r border-border p-6 flex-col space-y-4">
           {/* Current Bet */}
-          <div className="gaming-card p-4 mb-6">
-            <div className="text-center">
-              <div className="text-sm text-muted-foreground mb-1">Mise actuelle</div>
-              <div className="text-xl font-bold text-primary">
-                {currentBet.toLocaleString()} FCFA
-              </div>
-              {isDemo && (
-                <div className="text-xs text-accent mt-1">Mode Démo x{multiplier}</div>
-              )}
+          <div className="gaming-card p-4 text-center">
+            <div className="text-sm text-muted-foreground mb-1">Mise actuelle</div>
+            <div className="text-xl font-bold text-primary">
+              {formatAmount(currentBet)}
             </div>
+            {isDemo && (
+              <div className="text-xs text-accent mt-1">Mode Démo</div>
+            )}
           </div>
 
-          {/* Game Stats */}
-          <div className="space-y-4 flex-1">
-            <div className="gaming-card p-4">
-              <div className="flex items-center mb-2">
-                <Target className="w-5 h-5 text-primary mr-2" />
-                <span className="text-sm text-muted-foreground">Score</span>
-              </div>
+          {/* Game Stats Grid */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="gaming-card p-4 text-center">
+              <div className="text-sm text-muted-foreground mb-1">Score</div>
               <div className="text-2xl font-bold gaming-text-gradient">
                 {score.toLocaleString()}
               </div>
             </div>
-
-            <div className="gaming-card p-4">
-              <div className="flex items-center mb-2">
-                <Zap className="w-5 h-5 text-accent mr-2" />
-                <span className="text-sm text-muted-foreground">Lignes</span>
-              </div>
+            <div className="gaming-card p-4 text-center">
+              <div className="text-sm text-muted-foreground mb-1">Lignes</div>
               <div className="text-2xl font-bold text-accent">
                 {lines}
               </div>
             </div>
-
-            <div className="gaming-card p-4">
-              <div className="flex items-center mb-2">
-                <TrendingUp className="w-5 h-5 text-success mr-2" />
-                <span className="text-sm text-muted-foreground">Gains actuels</span>
-              </div>
+          </div>
+          
+          <div className="gaming-card p-4 text-center flex-1">
+              <div className="text-sm text-muted-foreground mb-1">Gains actuels</div>
               <div className="text-2xl font-bold text-success">
-                {earnings.toLocaleString()} FCFA
-              </div>
-            </div>
-          </div>
-
-          {/* Balance */}
-          <div className="gaming-card p-4 mt-6">
-            <div className="text-center">
-              <div className="text-sm text-muted-foreground mb-1">Solde</div>
-              <div className="text-lg font-bold text-secondary">
-                {balance.toLocaleString()} FCFA
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Main Game Area */}
-        <div className="flex-1 flex items-center justify-center p-2 lg:p-4">
-          <div className="w-full max-w-sm">
-            <TetrisBoard 
-              onScoreChange={setScore}
-              onLinesChange={setLines}
-              isDemo={isDemo}
-              onRealPlay={handleRealPlay}
-            />
-          </div>
-        </div>
-
-        {/* Desktop Right Panel */}
-        <div className="hidden lg:flex w-80 bg-surface/30 backdrop-blur-sm border-l border-border p-6">
-          <div className="space-y-6">
-            {/* Instructions */}
-            <div className="gaming-card p-4">
-              <h3 className="font-semibold mb-3 text-center">🎮 Contrôles</h3>
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <div className="flex items-center">
-                  <div className="w-6 h-6 bg-primary/20 rounded mr-2 flex items-center justify-center text-xs">📱</div>
-                  <span>Glisser pour déplacer</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-6 h-6 bg-secondary/20 rounded mr-2 flex items-center justify-center text-xs">👆</div>
-                  <span>Tapoter pour tourner</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-6 h-6 bg-accent/20 rounded mr-2 flex items-center justify-center text-xs">⌨️</div>
-                  <span>Flèches + Espace</span>
-                </div>
+                {formatAmount(earnings)}
               </div>
             </div>
 
-            {/* Game Rules */}
-            <div className="gaming-card p-4">
+           {/* Game Rules */}
+           <div className="gaming-card p-4">
               <h3 className="font-semibold mb-3 text-center">💰 Gains</h3>
               <div className="space-y-2 text-sm text-muted-foreground">
                 <div className="flex justify-between">
                   <span>1 Point =</span>
                   <span className="text-success font-medium">
-                    {isDemo ? '0.5' : '0.1'} FCFA
+                    {formatAmount(settings.base_return_rate / 1000, { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Multiplicateur:</span>
-                  <span className="text-secondary font-medium">x{multiplier.toFixed(1)}</span>
-                </div>
-                <div className="pt-2 border-t border-border">
-                  <div className="text-center text-xs">
-                    Plus de lignes = Plus de gains !
-                  </div>
+                  <span>Multiplicateur Max:</span>
+                  <span className="text-secondary font-medium">x{settings.max_win_multiplier}</span>
                 </div>
               </div>
             </div>
+        </aside>
+
+        {/* Main Game Area */}
+        <main className="flex-1 flex flex-col items-center justify-center p-2 lg:p-4 overflow-hidden">
+          <div className="w-full max-w-sm flex-1 relative">
+            <TetrisBoard
+              onScoreChange={setScore}
+              onLinesChange={setLines}
+              isDemo={isDemo}
+              onGameOver={handleGameOver}
+              playMove={playMove}
+              playRotate={playRotate}
+              playDrop={playDrop}
+              playLineClear={playLineClear}
+              playGameOver={playGameOver}
+              playDebrisFall={playDebrisFall}
+              gameSettings={settings}
+            />
           </div>
-        </div>
+        </main>
       </div>
 
-      {/* Admin Panel */}
+      {/* Admin Panel & Button */}
       {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
-      
-      {/* Admin Access Button */}
       <Button
         onClick={() => setShowAdmin(true)}
         variant="ghost"

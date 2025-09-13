@@ -64,7 +64,7 @@ export const useWallet = (userId?: string) => {
   // Process deposit with Lygos
   const depositWithLygos = async (amount: number, paymentMethod: string) => {
     if (!userId) {
-      toast.error('Utilisateur non connecté');
+      setTimeout(() => toast.error('Utilisateur non connecté'), 0);
       return { success: false };
     }
 
@@ -82,7 +82,7 @@ export const useWallet = (userId?: string) => {
       if (error) throw error;
 
       if (data.success) {
-        toast.success('Dépôt initié avec succès');
+        setTimeout(() => toast.success('Dépôt initié avec succès'), 0);
         fetchWallet();
         fetchTransactions();
         return { success: true, paymentUrl: data.payment_url, transactionId: data.transaction_id };
@@ -90,51 +90,98 @@ export const useWallet = (userId?: string) => {
         throw new Error(data.error);
       }
     } catch (error: any) {
+      console.error('Full Lygos deposit error object:', JSON.stringify(error, null, 2));
       console.error('Deposit error:', error);
-      toast.error(error.message || 'Erreur lors du dépôt');
-      return { success: false, error: error.message };
+      const errorMessage = error.context?.error || error.message || 'Erreur lors du dépôt';
+      setTimeout(() => toast.error(errorMessage), 0);
+      return { success: false, error: errorMessage };
     }
   };
 
-  // Process deposit with MyCoolPay
-  const depositWithMyCoolPay = async (amount: number, phoneNumber: string) => {
+  // Initiate a payment with MyCoolPay
+  const initiateMyCoolPayPayment = async (paymentData: any, method: 'orange' | 'mtn' | 'card', phoneNumber?: string) => {
     if (!userId) {
-      toast.error('Utilisateur non connecté');
+      setTimeout(() => toast.error('Utilisateur non connecté'), 0);
       return { success: false };
     }
 
     try {
       const { data, error } = await supabase.functions.invoke('mycoolpay-payment', {
         body: {
-          action: 'process_payin',
-          amount,
-          currency: 'XOF',
+          action: 'initiate_payment',
+          paymentData,
+          method,
+          phoneNumber,
           user_id: userId,
-          phone_number: phoneNumber
-        }
+        },
       });
 
       if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      
+      setTimeout(() => toast.success('Paiement initié, veuillez suivre les instructions.'), 0);
+      return { success: true, ...data };
+    } catch (err: any) {
+      console.error('MyCoolPay initiation error:', err);
+      setTimeout(() => toast.error(err.message || 'Erreur lors de l\'initiation du paiement.'), 0);
+      return { success: false, error: err.message };
+    }
+  };
 
-      if (data.success) {
-        toast.success('Dépôt initié avec succès');
+  // Verify OTP for a MyCoolPay transaction
+  const verifyMyCoolPayOtp = async (transaction_ref: string, otpCode: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('mycoolpay-payment', {
+        body: {
+          action: 'authorize_payment',
+          transaction_ref,
+          otpCode,
+        },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      setTimeout(() => toast.success('Code OTP vérifié.'), 0);
+      return { success: true, ...data };
+    } catch (err: any) {
+      console.error('MyCoolPay OTP error:', err);
+      setTimeout(() => toast.error(err.message || 'Erreur lors de la vérification OTP.'), 0);
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Check status of a MyCoolPay transaction
+  const checkMyCoolPayStatus = async (transaction_ref: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('mycoolpay-payment', {
+        body: {
+          action: 'check_status',
+          transaction_ref,
+        },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      
+      // Potentially refresh wallet/transactions if status is final
+      if (data.transaction_status === 'SUCCESS' || data.transaction_status === 'FAILED') {
         fetchWallet();
         fetchTransactions();
-        return { success: true, transactionId: data.transaction_id };
-      } else {
-        throw new Error(data.error);
       }
-    } catch (error: any) {
-      console.error('Deposit error:', error);
-      toast.error(error.message || 'Erreur lors du dépôt');
-      return { success: false, error: error.message };
+
+      return { success: true, ...data };
+    } catch (err: any) {
+      console.error('MyCoolPay status check error:', err);
+      // Do not toast here as this is a background check
+      return { success: false, error: err.message };
     }
   };
 
   // Process withdrawal
   const withdraw = async (amount: number, paymentMethod: string, gateway: 'lygos' | 'mycoolpay', details: any) => {
     if (!userId || !wallet || wallet.balance < amount) {
-      toast.error('Solde insuffisant');
+      setTimeout(() => toast.error('Solde insuffisant'), 0);
       return { success: false };
     }
 
@@ -155,7 +202,7 @@ export const useWallet = (userId?: string) => {
       if (error) throw error;
 
       if (data.success) {
-        toast.success('Retrait initié avec succès');
+        setTimeout(() => toast.success('Retrait initié avec succès'), 0);
         fetchWallet();
         fetchTransactions();
         return { success: true, transactionId: data.transaction_id };
@@ -163,16 +210,18 @@ export const useWallet = (userId?: string) => {
         throw new Error(data.error);
       }
     } catch (error: any) {
+      console.error('Full withdrawal error object:', JSON.stringify(error, null, 2));
       console.error('Withdrawal error:', error);
-      toast.error(error.message || 'Erreur lors du retrait');
-      return { success: false, error: error.message };
+      const errorMessage = error.context?.error || error.message || 'Erreur lors du retrait';
+      setTimeout(() => toast.error(errorMessage), 0);
+      return { success: false, error: errorMessage };
     }
   };
 
   // Process game bet (deduct from wallet)
   const processBet = async (betAmount: number, gameId: string) => {
     if (!userId || !wallet || wallet.balance < betAmount) {
-      toast.error('Solde insuffisant pour cette mise');
+      setTimeout(() => toast.error('Solde insuffisant pour cette mise'), 0);
       return { success: false };
     }
 
@@ -209,7 +258,7 @@ export const useWallet = (userId?: string) => {
       return { success: true, transactionId: data.id };
     } catch (error: any) {
       console.error('Bet processing error:', error);
-      toast.error('Erreur lors du traitement de la mise');
+      setTimeout(() => toast.error('Erreur lors du traitement de la mise'), 0);
       return { success: false, error: error.message };
     }
   };
@@ -250,7 +299,7 @@ export const useWallet = (userId?: string) => {
       fetchWallet();
       fetchTransactions();
 
-      toast.success(`Gain de ${winAmount} FCFA ajouté à votre solde !`);
+      setTimeout(() => toast.success(`Gain de ${winAmount} FCFA ajouté à votre solde !`), 0);
       return { success: true, transactionId: data.id };
     } catch (error: any) {
       console.error('Win processing error:', error);
@@ -272,7 +321,9 @@ export const useWallet = (userId?: string) => {
     fetchWallet,
     fetchTransactions,
     depositWithLygos,
-    depositWithMyCoolPay,
+    initiateMyCoolPayPayment,
+    verifyMyCoolPayOtp,
+    checkMyCoolPayStatus,
     withdraw,
     processBet,
     processWin

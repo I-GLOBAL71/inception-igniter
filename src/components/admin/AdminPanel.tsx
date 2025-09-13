@@ -5,22 +5,14 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings, DollarSign, Gauge, Volume2, Database, TrendingUp, Target, Zap, Coins, CreditCard, Trophy } from 'lucide-react';
+import { Settings, DollarSign, Gauge, Volume2, Database, TrendingUp, Target, CreditCard, Trophy } from 'lucide-react';
 import { useGameEconomics } from '@/hooks/useGameEconomics';
+import { useGameSettings, GameSettings } from '@/hooks/useGameSettings';
 import { toast } from 'sonner';
-import { Separator } from '@/components/ui/separator';
+import { supabase } from '@/integrations/supabase/client';
 
 interface AdminPanelProps {
   onClose: () => void;
-}
-
-interface GameSettings {
-  initialSpeed: number;
-  speedIncrease: number;
-  fastDropMultiplier: number;
-  softDropMultiplier: number;
-  baseEarningsRate: number; // EUR per 1000 points
-  volumeLevel: number;
 }
 
 interface BatchGenerationForm {
@@ -30,19 +22,10 @@ interface BatchGenerationForm {
 }
 
 export default function AdminPanel({ onClose }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState('economics');
-  const [lygosApiKey, setLygosApiKey] = useState('');
-  const [coolpayApiKey, setCoolpayApiKey] = useState('');
+  const { settings: initialSettings } = useGameSettings();
   
-  const [settings, setSettings] = useState<GameSettings>({
-    initialSpeed: 1000,
-    speedIncrease: 100,
-    fastDropMultiplier: 20,
-    softDropMultiplier: 3,
-    baseEarningsRate: 0.01,
-    volumeLevel: 0.5
-  });
-
+  const [settings, setSettings] = useState<Partial<GameSettings>>(() => initialSettings || {});
+  const [apiKeys, setApiKeys] = useState({ lygos: '', mycoolpay_private: '' });
   const [password, setPassword] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [batchForm, setBatchForm] = useState<BatchGenerationForm>({
@@ -66,13 +49,31 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     activateBatch
   } = useGameEconomics();
 
-  // Load data on authentication
   useEffect(() => {
+    const fetchApiKeys = async () => {
+      const { data, error } = await supabase
+        .from('admin_settings')
+        .select('key, value')
+        .in('key', ['lygos_api_key', 'mycoolpay_private_key']);
+
+      if (data) {
+        const keys = data.reduce((acc, item) => {
+          if (item.key === 'lygos_api_key') acc.lygos = item.value;
+          if (item.key === 'mycoolpay_private_key') acc.mycoolpay_private = item.value;
+          return acc;
+        }, { lygos: '', mycoolpay_private: '' });
+        setApiKeys(keys);
+      } else if (error) {
+        console.error('Error fetching API keys:', error);
+      }
+    };
+
     if (isAuthenticated) {
       fetchEconomicConfig();
       fetchActiveBatch();
       fetchJackpotPool();
       loadAllBatches();
+      fetchApiKeys();
     }
   }, [isAuthenticated, fetchEconomicConfig, fetchActiveBatch, fetchJackpotPool]);
 
@@ -82,7 +83,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   };
 
   const handleAuth = () => {
-    if (password === 'admin123') { // In a real app, this would be properly secured
+    if (password === 'admin123') {
       setIsAuthenticated(true);
     }
   };
@@ -115,7 +116,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
       if (batch) {
         toast.success(`Lot "${batch.batch_name}" généré avec succès!`);
         setBatchForm({ batchName: '', totalGames: 1000, averageBetAmount: 1000 });
-        loadAllBatches(); // Refresh the batch list
+        loadAllBatches();
       } else {
         toast.error('Erreur lors de la génération du lot');
       }
@@ -129,30 +130,45 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
 
   const handleSaveApiKeys = async () => {
     try {
-      // Save Lygos API key
+      const upserts = [];
       if (apiKeys.lygos) {
-        await supabase
-          .from('admin_settings')
-          .upsert({ key: 'lygos_api_key', value: apiKeys.lygos });
+        upserts.push({ key: 'lygos_api_key', value: apiKeys.lygos });
       }
-      
-      // Save MyCoolPay API key  
-      if (apiKeys.mycoolpay) {
-        await supabase
-          .from('admin_settings')
-          .upsert({ key: 'mycoolpay_api_key', value: apiKeys.mycoolpay });
+      if (apiKeys.mycoolpay_private) {
+        upserts.push({ key: 'mycoolpay_private_key', value: apiKeys.mycoolpay_private });
+      }
+
+      if (upserts.length > 0) {
+        const { error } = await supabase.from('admin_settings').upsert(upserts, { onConflict: 'key' });
+        if (error) throw error;
       }
       
       toast.success('Clés API sauvegardées avec succès');
     } catch (error) {
       console.error('Error saving API keys:', error);
-      toast.error('Erreur lors de la sauvegarde');
+      toast.error('Erreur lors de la sauvegarde des clés API.');
     }
   };
 
   const handleSave = () => {
-    localStorage.setItem('gameSettings', JSON.stringify(settings));
-    toast.success('Paramètres sauvegardés');
+    const {
+      initialSpeed,
+      speedIncrease,
+      fastDropMultiplier,
+      softDropMultiplier,
+      volumeLevel
+    } = settings;
+
+    const gameplaySettings = {
+      initialSpeed,
+      speedIncrease,
+      fastDropMultiplier,
+      softDropMultiplier,
+      volumeLevel
+    };
+
+    localStorage.setItem('gameSettings', JSON.stringify(gameplaySettings));
+    toast.success('Paramètres de gameplay et audio sauvegardés');
     onClose();
   };
 
@@ -197,7 +213,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings className="w-5 h-5" />
-            Panneau d'Administration Économique
+            Panneau d'Administration
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -215,7 +231,6 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {economicConfig ? (
                   <>
-                    {/* Distribution des gains */}
                     <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2">
@@ -229,34 +244,25 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                           <Slider
                             value={[economicConfig.player_share_percentage]}
                             onValueChange={([value]) => handleUpdateEconomicConfig('player_share_percentage', value)}
-                            max={80}
-                            min={60}
-                            step={1}
+                            max={80} min={60} step={1}
                           />
                         </div>
-                        
                         <div>
                           <Label>Part plateforme: {economicConfig.platform_share_percentage}%</Label>
                           <Slider
                             value={[economicConfig.platform_share_percentage]}
                             onValueChange={([value]) => handleUpdateEconomicConfig('platform_share_percentage', value)}
-                            max={30}
-                            min={10}
-                            step={1}
+                            max={30} min={10} step={1}
                           />
                         </div>
-                        
                         <div>
                           <Label>Part jackpot: {economicConfig.jackpot_share_percentage}%</Label>
                           <Slider
                             value={[economicConfig.jackpot_share_percentage]}
                             onValueChange={([value]) => handleUpdateEconomicConfig('jackpot_share_percentage', value)}
-                            max={20}
-                            min={5}
-                            step={1}
+                            max={20} min={5} step={1}
                           />
                         </div>
-                        
                         <div className="p-3 bg-muted rounded-lg">
                           <p className="text-sm">
                             Total: {economicConfig.player_share_percentage + economicConfig.platform_share_percentage + economicConfig.jackpot_share_percentage}%
@@ -264,8 +270,6 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                         </div>
                       </CardContent>
                     </Card>
-
-                    {/* Paramètres de gains */}
                     <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2">
@@ -279,218 +283,193 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                           <Slider
                             value={[economicConfig.base_return_rate * 1000]}
                             onValueChange={([value]) => handleUpdateEconomicConfig('base_return_rate', value / 1000)}
-                            max={50}
-                            min={1}
-                            step={1}
+                            max={50} min={1} step={1}
                           />
                           <div className="text-xs text-muted-foreground">
                             {economicConfig.base_return_rate.toFixed(4)} EUR pour 1000 points
                           </div>
                         </div>
-                        
                         <div>
                           <Label>Multiplicateur maximum: {economicConfig.max_win_multiplier}x</Label>
                           <Slider
                             value={[economicConfig.max_win_multiplier]}
                             onValueChange={([value]) => handleUpdateEconomicConfig('max_win_multiplier', value)}
-                            max={50}
-                            min={5}
-                            step={0.5}
+                            max={50} min={5} step={0.5}
                           />
                         </div>
-                        
                         <div>
                           <Label>Taux de déclenchement jackpot: {(economicConfig.jackpot_trigger_rate * 100).toFixed(3)}%</Label>
                           <Slider
                             value={[economicConfig.jackpot_trigger_rate * 100000]}
                             onValueChange={([value]) => handleUpdateEconomicConfig('jackpot_trigger_rate', value / 100000)}
-                            max={500}
-                            min={10}
-                            step={1}
+                            max={500} min={10} step={1}
                           />
                         </div>
                       </CardContent>
                     </Card>
                   </>
                 ) : (
-                  <div className="col-span-2">
-                    <p>Chargement de la configuration économique...</p>
-                  </div>
+                  <div className="col-span-2"><p>Chargement de la configuration économique...</p></div>
                 )}
               </div>
             </TabsContent>
 
             <TabsContent value="batches" className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Génération de nouveau lot */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Database className="w-5 h-5" />
-                      Générer un Nouveau Lot
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label htmlFor="batchName">Nom du lot</Label>
-                      <Input
-                        id="batchName"
-                        value={batchForm.batchName}
-                        onChange={(e) => setBatchForm({...batchForm, batchName: e.target.value})}
-                        placeholder="Ex: Lot_2024_001"
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label>Nombre total de parties: {batchForm.totalGames.toLocaleString()}</Label>
-                      <Slider
-                        value={[batchForm.totalGames]}
-                        onValueChange={([value]) => setBatchForm({...batchForm, totalGames: value})}
-                        max={10000}
-                        min={100}
-                        step={100}
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label>Mise moyenne (FCFA): {batchForm.averageBetAmount.toLocaleString()}</Label>
-                      <Slider
-                        value={[batchForm.averageBetAmount]}
-                        onValueChange={([value]) => setBatchForm({...batchForm, averageBetAmount: value})}
-                        max={10000}
-                        min={100}
-                        step={100}
-                      />
-                    </div>
-
-                    <div className="p-4 bg-muted rounded-lg space-y-2">
-                      <h4 className="font-medium">Prévisions du lot:</h4>
-                      <p className="text-sm">Investment total: {(batchForm.totalGames * batchForm.averageBetAmount).toLocaleString()} FCFA</p>
-                      {economicConfig && (
-                        <>
-                          <p className="text-sm text-success">
-                            Gains joueurs: {Math.floor((batchForm.totalGames * batchForm.averageBetAmount * economicConfig.player_share_percentage / 100)).toLocaleString()} FCFA
-                          </p>
-                          <p className="text-sm text-primary">
-                            Revenus plateforme: {Math.floor((batchForm.totalGames * batchForm.averageBetAmount * economicConfig.platform_share_percentage / 100)).toLocaleString()} FCFA
-                          </p>
-                          <p className="text-sm text-accent">
-                            Contribution jackpot: {Math.floor((batchForm.totalGames * batchForm.averageBetAmount * economicConfig.jackpot_share_percentage / 100)).toLocaleString()} FCFA
-                          </p>
-                        </>
-                      )}
-                    </div>
-                    
-                    <Button 
-                      onClick={handleGenerateBatch}
-                      disabled={isGenerating}
-                      className="w-full"
-                    >
-                      {isGenerating ? 'Génération...' : 'Générer le Lot'}
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                {/* Lot actif */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Target className="w-5 h-5" />
-                      Lot Actif
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {activeBatch ? (
-                      <div className="space-y-3">
-                        <div>
-                          <h4 className="font-medium">{activeBatch.batch_name}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {activeBatch.games_played} / {activeBatch.total_games} parties jouées
-                          </p>
-                        </div>
-                        
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-sm">
-                            <span>Progression:</span>
-                            <span>{Math.round((activeBatch.games_played / activeBatch.total_games) * 100)}%</span>
-                          </div>
-                          <div className="w-full bg-muted rounded-full h-2">
-                            <div 
-                              className="bg-primary rounded-full h-2 transition-all"
-                              style={{ width: `${Math.round((activeBatch.games_played / activeBatch.total_games) * 100)}%` }}
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div className="p-2 bg-muted rounded">
-                            <p className="font-medium">Cible gains</p>
-                            <p>{activeBatch.player_payout_target.toLocaleString()}</p>
-                          </div>
-                          <div className="p-2 bg-muted rounded">
-                            <p className="font-medium">Gains réels</p>
-                            <p>{activeBatch.actual_player_payout.toLocaleString()}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-muted-foreground">Aucun lot actif</p>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Liste de tous les lots générés */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Tous les Lots Générés</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {allBatches.length > 0 ? (
-                    <div className="space-y-3">
-                      {allBatches.map((batch) => (
-                        <div key={batch.id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <h4 className="font-medium">{batch.batch_name}</h4>
-                              {batch.is_active && (
-                                <span className="px-2 py-1 bg-primary text-primary-foreground text-xs rounded-full">
-                                  Actif
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              {batch.total_games.toLocaleString()} parties • {batch.total_investment.toLocaleString()} FCFA
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Créé le {new Date(batch.created_at).toLocaleDateString('fr-FR')}
-                            </p>
-                          </div>
-                          <div className="flex gap-2">
-                            {!batch.is_active && (
-                              <Button
-                                size="sm"
-                                onClick={() => {
-                                  activateBatch(batch.id).then(() => {
-                                    toast.success('Lot activé');
-                                    fetchActiveBatch();
-                                    loadAllBatches();
-                                  });
-                                }}
-                              >
-                                Activer
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground">Aucun lot généré</p>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <Card>
+                   <CardHeader>
+                     <CardTitle className="flex items-center gap-2">
+                       <Database className="w-5 h-5" />
+                       Générer un Nouveau Lot
+                     </CardTitle>
+                   </CardHeader>
+                   <CardContent className="space-y-4">
+                     <div>
+                       <Label htmlFor="batchName">Nom du lot</Label>
+                       <Input
+                         id="batchName"
+                         value={batchForm.batchName}
+                         onChange={(e) => setBatchForm({...batchForm, batchName: e.target.value})}
+                         placeholder="Ex: Lot_2024_001"
+                       />
+                     </div>
+                     <div>
+                       <Label>Nombre total de parties: {batchForm.totalGames.toLocaleString()}</Label>
+                       <Slider
+                         value={[batchForm.totalGames]}
+                         onValueChange={([value]) => setBatchForm({...batchForm, totalGames: value})}
+                         max={10000} min={100} step={100}
+                       />
+                     </div>
+                     <div>
+                       <Label>Mise moyenne (FCFA): {batchForm.averageBetAmount.toLocaleString()}</Label>
+                       <Slider
+                         value={[batchForm.averageBetAmount]}
+                         onValueChange={([value]) => setBatchForm({...batchForm, averageBetAmount: value})}
+                         max={10000} min={100} step={100}
+                       />
+                     </div>
+                     <div className="p-4 bg-muted rounded-lg space-y-2">
+                       <h4 className="font-medium">Prévisions du lot:</h4>
+                       <p className="text-sm">Investment total: {(batchForm.totalGames * batchForm.averageBetAmount).toLocaleString()} FCFA</p>
+                       {economicConfig && (
+                         <>
+                           <p className="text-sm text-success">
+                             Gains joueurs: {Math.floor((batchForm.totalGames * batchForm.averageBetAmount * economicConfig.player_share_percentage / 100)).toLocaleString()} FCFA
+                           </p>
+                           <p className="text-sm text-primary">
+                             Revenus plateforme: {Math.floor((batchForm.totalGames * batchForm.averageBetAmount * economicConfig.platform_share_percentage / 100)).toLocaleString()} FCFA
+                           </p>
+                           <p className="text-sm text-accent">
+                             Contribution jackpot: {Math.floor((batchForm.totalGames * batchForm.averageBetAmount * economicConfig.jackpot_share_percentage / 100)).toLocaleString()} FCFA
+                           </p>
+                         </>
+                       )}
+                     </div>
+                     <Button 
+                       onClick={handleGenerateBatch}
+                       disabled={isGenerating}
+                       className="w-full"
+                     >
+                       {isGenerating ? 'Génération...' : 'Générer le Lot'}
+                     </Button>
+                   </CardContent>
+                 </Card>
+                 <Card>
+                   <CardHeader>
+                     <CardTitle className="flex items-center gap-2">
+                       <Target className="w-5 h-5" />
+                       Lot Actif
+                     </CardTitle>
+                   </CardHeader>
+                   <CardContent>
+                     {activeBatch ? (
+                       <div className="space-y-3">
+                         <div>
+                           <h4 className="font-medium">{activeBatch.batch_name}</h4>
+                           <p className="text-sm text-muted-foreground">
+                             {activeBatch.games_played} / {activeBatch.total_games} parties jouées
+                           </p>
+                         </div>
+                         <div className="space-y-1">
+                           <div className="flex justify-between text-sm">
+                             <span>Progression:</span>
+                             <span>{Math.round((activeBatch.games_played / activeBatch.total_games) * 100)}%</span>
+                           </div>
+                           <div className="w-full bg-muted rounded-full h-2">
+                             <div 
+                               className="bg-primary rounded-full h-2 transition-all"
+                               style={{ width: `${Math.round((activeBatch.games_played / activeBatch.total_games) * 100)}%` }}
+                             />
+                           </div>
+                         </div>
+                         <div className="grid grid-cols-2 gap-2 text-xs">
+                           <div className="p-2 bg-muted rounded">
+                             <p className="font-medium">Cible gains</p>
+                             <p>{activeBatch.player_payout_target.toLocaleString()}</p>
+                           </div>
+                           <div className="p-2 bg-muted rounded">
+                             <p className="font-medium">Gains réels</p>
+                             <p>{activeBatch.actual_player_payout.toLocaleString()}</p>
+                           </div>
+                         </div>
+                       </div>
+                     ) : (
+                       <p className="text-muted-foreground">Aucun lot actif</p>
+                     )}
+                   </CardContent>
+                 </Card>
+               </div>
+               <Card>
+                 <CardHeader>
+                   <CardTitle>Tous les Lots Générés</CardTitle>
+                 </CardHeader>
+                 <CardContent>
+                   {allBatches.length > 0 ? (
+                     <div className="space-y-3">
+                       {allBatches.map((batch) => (
+                         <div key={batch.id} className="flex items-center justify-between p-3 border rounded-lg">
+                           <div className="flex-1">
+                             <div className="flex items-center gap-2">
+                               <h4 className="font-medium">{batch.batch_name}</h4>
+                               {batch.is_active && (
+                                 <span className="px-2 py-1 bg-primary text-primary-foreground text-xs rounded-full">
+                                   Actif
+                                 </span>
+                               )}
+                             </div>
+                             <p className="text-sm text-muted-foreground">
+                               {batch.total_games.toLocaleString()} parties • {batch.total_investment.toLocaleString()} FCFA
+                             </p>
+                             <p className="text-xs text-muted-foreground">
+                               Créé le {new Date(batch.created_at).toLocaleDateString('fr-FR')}
+                             </p>
+                           </div>
+                           <div className="flex gap-2">
+                             {!batch.is_active && (
+                               <Button
+                                 size="sm"
+                                 onClick={() => {
+                                   activateBatch(batch.id).then(() => {
+                                     toast.success('Lot activé');
+                                     fetchActiveBatch();
+                                     loadAllBatches();
+                                   });
+                                 }}
+                               >
+                                 Activer
+                               </Button>
+                             )}
+                           </div>
+                         </div>
+                       ))}
+                     </div>
+                   ) : (
+                     <p className="text-muted-foreground">Aucun lot généré</p>
+                   )}
+                 </CardContent>
+               </Card>
+             </TabsContent>
 
             <TabsContent value="jackpot" className="space-y-6">
               <Card>
@@ -509,14 +488,12 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                           {jackpotPool.current_amount.toLocaleString()} FCFA
                         </p>
                       </div>
-                      
                       <div className="p-4 bg-muted rounded-lg">
                         <h4 className="font-medium">Total Contributions</h4>
                         <p className="text-xl font-semibold">
                           {jackpotPool.total_contributions.toLocaleString()} FCFA
                         </p>
                       </div>
-                      
                       <div className="p-4 bg-muted rounded-lg">
                         <h4 className="font-medium">Total Gains Distribués</h4>
                         <p className="text-xl font-semibold">
@@ -531,7 +508,6 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
               </Card>
             </TabsContent>
 
-            {/* Payments Tab */}
             <TabsContent value="payments" className="space-y-6">
               <Card>
                 <CardHeader>
@@ -539,104 +515,29 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                     <CreditCard className="w-5 h-5 mr-2 text-primary" />
                     Configuration des Agrégateurs de Paiement
                   </CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Configurez les clés API pour les partenaires de paiement intégrés
-                  </p>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  
-                  {/* Lygos App */}
                   <div className="space-y-4">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center">
-                        <span className="text-xs font-bold">L</span>
-                      </div>
-                      <div>
-                        <h3 className="font-semibold">Lygos App</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Gateway de paiement principal
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="grid gap-3">
-                      <div>
-                        <Label htmlFor="lygos-api">Clé API Lygos</Label>
-                        <Input
-                          id="lygos-api"
-                          type="password"
-                          value={lygosApiKey}
-                          onChange={(e) => setLygosApiKey(e.target.value)}
-                          placeholder="Entrez votre clé API Lygos"
-                        />
-                      </div>
-                      <div className="flex space-x-2">
-                        <Button size="sm" className="flex-1">
-                          Sauvegarder
-                        </Button>
-                        <Button size="sm" variant="outline">
-                          Tester la connexion
-                        </Button>
-                      </div>
-                    </div>
-                    
-                    <div className="text-xs text-muted-foreground space-y-1">
-                      <p>• Endpoints supportés: Create Gateway, Get Gateway, Update Gateway</p>
-                      <p>• Documentation: <a href="https://docs.lygosapp.com" className="text-primary hover:underline" target="_blank" rel="noopener">docs.lygosapp.com</a></p>
-                    </div>
+                    <Label htmlFor="lygos-api">Clé API Lygos</Label>
+                    <Input
+                      id="lygos-api"
+                      type="password"
+                      value={apiKeys.lygos}
+                      onChange={(e) => setApiKeys(prev => ({ ...prev, lygos: e.target.value }))}
+                      placeholder="Entrez votre clé API Lygos"
+                    />
                   </div>
-
-                  <Separator />
-
-                  {/* My-CoolPay */}
                   <div className="space-y-4">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-8 h-8 bg-secondary/20 rounded-lg flex items-center justify-center">
-                        <span className="text-xs font-bold">C</span>
-                      </div>
-                      <div>
-                        <h3 className="font-semibold">My-CoolPay</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Processeur de paiement secondaire
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="grid gap-3">
-                      <div>
-                        <Label htmlFor="coolpay-api">Clé API CoolPay</Label>
-                        <Input
-                          id="coolpay-api"
-                          type="password"
-                          value={coolpayApiKey}
-                          onChange={(e) => setCoolpayApiKey(e.target.value)}
-                          placeholder="Entrez votre clé API CoolPay"
-                        />
-                      </div>
-                      <div className="flex space-x-2">
-                        <Button size="sm" className="flex-1">
-                          Sauvegarder
-                        </Button>
-                        <Button size="sm" variant="outline">
-                          Tester la connexion
-                        </Button>
-                      </div>
-                    </div>
-                    
-                    <div className="text-xs text-muted-foreground space-y-1">
-                      <p>• API RESTful avec authentification par clé</p>
-                      <p>• Documentation: <a href="https://documenter.getpostman.com/view/17178321/UV5ZCx8f" className="text-primary hover:underline" target="_blank" rel="noopener">Postman Collection</a></p>
-                    </div>
+                    <Label htmlFor="mycoolpay-private-api">Clé API MyCoolPay (Privée)</Label>
+                    <Input
+                      id="mycoolpay-private-api"
+                      type="password"
+                      value={apiKeys.mycoolpay_private}
+                      onChange={(e) => setApiKeys(prev => ({ ...prev, mycoolpay_private: e.target.value }))}
+                      placeholder="Entrez la clé privée MyCoolPay"
+                    />
                   </div>
-
-                  <div className="p-4 bg-accent/10 border border-accent/30 rounded-lg">
-                    <h4 className="font-semibold text-accent mb-2">Configuration Requise</h4>
-                    <div className="text-sm text-muted-foreground space-y-1">
-                      <p>• Au moins un agrégateur doit être configuré pour les paiements réels</p>
-                      <p>• Les clés sont chiffrées et stockées de manière sécurisée</p>
-                      <p>• Testez toujours les connexions après la configuration</p>
-                    </div>
-                  </div>
+                  <Button onClick={handleSaveApiKeys}>Sauvegarder les Clés API</Button>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -645,64 +546,42 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <div>
-                    <Label className="flex items-center gap-2 mb-2">
-                      <Gauge className="w-4 h-4" />
-                      Vitesse initiale (ms)
-                    </Label>
+                    <Label>Vitesse initiale (ms)</Label>
                     <Slider
-                      value={[settings.initialSpeed]}
+                      value={[settings.initialSpeed || 0]}
                       onValueChange={([value]) => setSettings({...settings, initialSpeed: value})}
-                      max={2000}
-                      min={200}
-                      step={50}
+                      max={2000} min={200} step={50}
                     />
-                    <div className="text-sm text-muted-foreground mt-1">
-                      {settings.initialSpeed}ms
-                    </div>
+                    <div className="text-sm text-muted-foreground mt-1">{settings.initialSpeed || 0}ms</div>
                   </div>
-
                   <div>
                     <Label>Accélération par niveau (ms)</Label>
                     <Slider
-                      value={[settings.speedIncrease]}
+                      value={[settings.speedIncrease || 0]}
                       onValueChange={([value]) => setSettings({...settings, speedIncrease: value})}
-                      max={200}
-                      min={10}
-                      step={10}
+                      max={200} min={10} step={10}
                     />
-                    <div className="text-sm text-muted-foreground mt-1">
-                      -{settings.speedIncrease}ms par niveau
-                    </div>
+                    <div className="text-sm text-muted-foreground mt-1">-{settings.speedIncrease || 0}ms par niveau</div>
                   </div>
                 </div>
-
                 <div className="space-y-4">
                   <div>
                     <Label>Multiplicateur chute rapide</Label>
                     <Slider
-                      value={[settings.fastDropMultiplier]}
+                      value={[settings.fastDropMultiplier || 0]}
                       onValueChange={([value]) => setSettings({...settings, fastDropMultiplier: value})}
-                      max={50}
-                      min={5}
-                      step={1}
+                      max={50} min={5} step={1}
                     />
-                    <div className="text-sm text-muted-foreground mt-1">
-                      x{settings.fastDropMultiplier}
-                    </div>
+                    <div className="text-sm text-muted-foreground mt-1">x{settings.fastDropMultiplier || 0}</div>
                   </div>
-
                   <div>
                     <Label>Multiplicateur descente douce</Label>
                     <Slider
-                      value={[settings.softDropMultiplier]}
+                      value={[settings.softDropMultiplier || 0]}
                       onValueChange={([value]) => setSettings({...settings, softDropMultiplier: value})}
-                      max={10}
-                      min={1}
-                      step={0.5}
+                      max={10} min={1} step={0.5}
                     />
-                    <div className="text-sm text-muted-foreground mt-1">
-                      x{settings.softDropMultiplier}
-                    </div>
+                    <div className="text-sm text-muted-foreground mt-1">x{settings.softDropMultiplier || 0}</div>
                   </div>
                 </div>
               </div>
@@ -711,20 +590,13 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
             <TabsContent value="audio" className="space-y-6">
               <div className="space-y-4">
                 <div>
-                  <Label className="flex items-center gap-2 mb-2">
-                    <Volume2 className="w-4 h-4" />
-                    Volume principal
-                  </Label>
+                  <Label>Volume principal</Label>
                   <Slider
-                    value={[settings.volumeLevel * 100]}
+                    value={[(settings.volumeLevel || 0) * 100]}
                     onValueChange={([value]) => setSettings({...settings, volumeLevel: value / 100})}
-                    max={100}
-                    min={0}
-                    step={5}
+                    max={100} min={0} step={5}
                   />
-                  <div className="text-sm text-muted-foreground mt-1">
-                    {Math.round(settings.volumeLevel * 100)}%
-                  </div>
+                  <div className="text-sm text-muted-foreground mt-1">{Math.round((settings.volumeLevel || 0) * 100)}%</div>
                 </div>
               </div>
             </TabsContent>
@@ -735,7 +607,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
               Annuler
             </Button>
             <Button onClick={handleSave} className="gaming-button-primary">
-              Sauvegarder
+              Sauvegarder les Paramètres
             </Button>
           </div>
         </CardContent>

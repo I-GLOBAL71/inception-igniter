@@ -49,6 +49,16 @@ export interface JackpotPool {
   total_payouts: number;
 }
 
+const defaultEconomicConfig: EconomicConfig = {
+  id: 'local',
+  player_share_percentage: 70,
+  platform_share_percentage: 20,
+  jackpot_share_percentage: 10,
+  base_return_rate: 0.01,
+  max_win_multiplier: 15,
+  jackpot_trigger_rate: 0.001,
+};
+
 export function useGameEconomics() {
   const [economicConfig, setEconomicConfig] = useState<EconomicConfig | null>(null);
   const [activeBatch, setActiveBatch] = useState<GameBatch | null>(null);
@@ -65,7 +75,8 @@ export function useGameEconomics() {
 
     if (error) {
       console.error('Error fetching economic config:', error);
-      return null;
+      setEconomicConfig(defaultEconomicConfig);
+      return defaultEconomicConfig;
     }
     
     setEconomicConfig(data);

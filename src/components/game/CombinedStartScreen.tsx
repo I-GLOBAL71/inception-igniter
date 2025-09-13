@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Trophy, Play, Coins, Gift, User, Wallet } from 'lucide-react';
-import { useCurrency } from '@/hooks/useCurrency';
+import { useCurrency } from '@/hooks/useCurrency.tsx';
 import { useAuth } from '@/hooks/useAuth';
 import AuthModal from '@/components/auth/AuthModal';
 import WalletModal from '@/components/wallet/WalletModal';
@@ -11,13 +11,19 @@ import WalletModal from '@/components/wallet/WalletModal';
 interface CombinedStartScreenProps {
   balance: number;
   onStartGame: (betAmount: number, demo: boolean) => void;
+  isDemo: boolean;
+  onModeChange: (isDemo: boolean) => void;
 }
 
 const BET_AMOUNTS = [100, 500, 1000, 2500, 5000, 10000];
 
-export default function CombinedStartScreen({ balance, onStartGame }: CombinedStartScreenProps) {
+export default function CombinedStartScreen({
+  balance,
+  onStartGame,
+  isDemo,
+  onModeChange,
+}: CombinedStartScreenProps) {
   const [selectedBet, setSelectedBet] = useState(500);
-  const [demoMode, setDemoMode] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
   const { formatAmount } = useCurrency();
@@ -25,11 +31,18 @@ export default function CombinedStartScreen({ balance, onStartGame }: CombinedSt
 
   const handleStartGame = () => {
     // Si mode réel mais pas connecté, ouvrir l'authentification
-    if (!demoMode && !user) {
+    if (!isDemo && !user) {
       setShowAuthModal(true);
       return;
     }
-    onStartGame(selectedBet, demoMode);
+
+    // Si mode réel et solde insuffisant, ouvrir le portefeuille
+    if (!isDemo && user && balance < selectedBet) {
+      setShowWalletModal(true);
+      return;
+    }
+
+    onStartGame(selectedBet, isDemo);
   };
 
   const getMultiplier = (amount: number, demo: boolean) => {
@@ -93,23 +106,23 @@ export default function CombinedStartScreen({ balance, onStartGame }: CombinedSt
         {/* Mode Toggle - Plus intuitif */}
         <div className="flex rounded-lg bg-muted p-1">
           <Button
-            variant={demoMode ? "default" : "ghost"}
+            variant={isDemo ? "default" : "ghost"}
             size="sm"
             className={`px-3 py-1 text-xs font-semibold ${
-              demoMode ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'
+              isDemo ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'
             }`}
-            onClick={() => setDemoMode(true)}
+            onClick={() => onModeChange(true)}
           >
             <Gift className="w-3 h-3 mr-1" />
             DÉMO
           </Button>
           <Button
-            variant={!demoMode ? "default" : "ghost"}
+            variant={!isDemo ? "default" : "ghost"}
             size="sm"
             className={`px-3 py-1 text-xs font-semibold ${
-              !demoMode ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
+              !isDemo ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
             }`}
-            onClick={() => setDemoMode(false)}
+            onClick={() => onModeChange(false)}
           >
             <Coins className="w-3 h-3 mr-1" />
             RÉEL
@@ -122,7 +135,7 @@ export default function CombinedStartScreen({ balance, onStartGame }: CombinedSt
         
         {/* Badge mode actuel - Très visible */}
         <div className="text-center">
-          {demoMode ? (
+          {isDemo ? (
             <Badge variant="outline" className="bg-accent/20 text-accent border-accent text-base px-4 py-2">
               🎮 MODE DÉMO GRATUIT - Aucun argent réel misé
             </Badge>
@@ -136,7 +149,7 @@ export default function CombinedStartScreen({ balance, onStartGame }: CombinedSt
         {/* Solde */}
         <Card className="gaming-card p-4 text-center">
           <div className="text-sm text-muted-foreground mb-1">
-            {demoMode ? 'Solde virtuel' : 'Solde disponible'}
+            {isDemo ? 'Solde virtuel' : 'Solde disponible'}
           </div>
           <div className="text-2xl font-bold text-secondary">
             {balance.toLocaleString()} FCFA
@@ -146,20 +159,25 @@ export default function CombinedStartScreen({ balance, onStartGame }: CombinedSt
         {/* Sélection de mise - Simplifiée */}
         <div className="space-y-3">
           <h3 className="text-center font-semibold">
-            {demoMode ? 'Mise virtuelle' : 'Choisissez votre mise'}
+            {isDemo ? 'Mise virtuelle' : 'Choisissez votre mise'}
           </h3>
           <div className="grid grid-cols-3 gap-2">
             {BET_AMOUNTS.map((amount) => (
               <Button
                 key={amount}
                 variant={selectedBet === amount ? "default" : "outline"}
-                className={`h-12 text-sm ${
-                  selectedBet === amount 
-                    ? 'gaming-button-primary' 
+                className={`h-12 text-sm transition-all ${
+                  selectedBet === amount
+                    ? 'gaming-button-primary'
                     : 'border-border'
-                } ${amount > balance && !demoMode ? 'opacity-50' : ''}`}
-                onClick={() => setSelectedBet(amount)}
-                disabled={amount > balance && !demoMode}
+                } ${amount > balance && !isDemo ? 'text-destructive border-destructive hover:bg-destructive/10' : ''}`}
+                onClick={() => {
+                  if (amount > balance && !isDemo) {
+                    setShowWalletModal(true);
+                  } else {
+                    setSelectedBet(amount);
+                  }
+                }}
               >
                 <div className="text-center">
                   <div className="font-semibold">{amount.toLocaleString()}</div>
@@ -175,7 +193,7 @@ export default function CombinedStartScreen({ balance, onStartGame }: CombinedSt
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Gains estimés (1000 pts):</span>
             <span className="font-bold text-success">
-              {getEstimatedGains(selectedBet, demoMode).toLocaleString()} FCFA
+              {getEstimatedGains(selectedBet, isDemo).toLocaleString()} FCFA
             </span>
           </div>
         </Card>
@@ -184,15 +202,15 @@ export default function CombinedStartScreen({ balance, onStartGame }: CombinedSt
         <Button
           onClick={handleStartGame}
           className="w-full h-14 text-lg font-bold gaming-button-primary"
-          disabled={(selectedBet > balance && !demoMode) || authLoading}
+          disabled={authLoading}
         >
           <Play className="w-5 h-5 mr-2" />
-          {demoMode ? 'JOUER EN DÉMO' : (user ? 'JOUER AVEC ARGENT RÉEL' : 'SE CONNECTER ET JOUER')}
+          {isDemo ? 'JOUER EN DÉMO' : (user ? 'JOUER AVEC ARGENT RÉEL' : 'SE CONNECTER ET JOUER')}
         </Button>
 
         {/* Notice selon le mode */}
         <div className="text-center text-xs text-muted-foreground">
-          {demoMode ? (
+          {isDemo ? (
             <p>💡 Mode démo : Découvrez le jeu sans risque</p>
           ) : user ? (
             <p>🔒 Paiements 100% sécurisés</p>

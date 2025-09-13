@@ -12,147 +12,139 @@ export const useRealMoneyGame = (userId?: string) => {
   // Start a real money game
   const startRealMoneyGame = useCallback(async (betAmount: number, isDemo: boolean = false) => {
     if (!userId && !isDemo) {
-      toast.error('Vous devez être connecté pour jouer avec de l\'argent réel');
+      setTimeout(() => toast.error("Vous devez être connecté pour jouer avec de l'argent réel"), 0);
       return null;
     }
 
+    // Handle Demo Game
+    if (isDemo) {
+      const demoGame = {
+        id: `demo-${Date.now()}`,
+        bet_amount: betAmount,
+        is_demo: true,
+        status: 'active',
+        game: {
+          id: 'demo-game-id',
+          max_achievable_score: 20000, // Typical max score
+          result_type: 'win', // Assume a 'win' type for demo
+          expected_payout: betAmount * 2.5, // Demo multiplier
+        },
+      };
+      setCurrentGameSession(demoGame);
+      console.log('Demo game started:', demoGame);
+      return demoGame;
+    }
+
+    // Handle Real Money Game
     try {
-      // Get next game from the batch
       const nextGame = await getNextGame(betAmount);
       if (!nextGame) {
-        toast.error('Aucune partie disponible pour ce montant');
+        setTimeout(() => toast.error('Aucune partie disponible pour ce montant. Réessayez plus tard.'), 0);
         return null;
       }
 
-      let sessionData: any = {
-        game_id: nextGame.id,
-        bet_amount: betAmount,
-        is_demo: isDemo,
-        status: 'active'
-      };
-
-      if (!isDemo && userId) {
-        // Process the bet (deduct from wallet)
-        const betResult = await processBet(betAmount, nextGame.id);
-        if (!betResult.success) {
-          return null;
-        }
-        sessionData.user_id = userId;
+      const betResult = await processBet(betAmount, nextGame.id);
+      if (!betResult.success) {
+        return null; // processBet should show a toast
       }
 
-      // Create game session
       const { data: gameSession, error } = await supabase
         .from('game_sessions')
-        .insert(sessionData)
+        .insert({
+          game_id: nextGame.id,
+          user_id: userId,
+          bet_amount: betAmount,
+          is_demo: false,
+          status: 'active',
+        })
         .select()
         .single();
 
       if (error) {
         console.error('Error creating game session:', error);
-        toast.error('Erreur lors de la création de la session de jeu');
+        toast.error('Erreur lors de la création de la session de jeu.');
+        // TODO: Consider refunding the bet here
         return null;
       }
 
-      setCurrentGameSession({
-        ...gameSession,
-        game: nextGame
-      });
+      const sessionWithGame = { ...gameSession, game: nextGame };
+      setCurrentGameSession(sessionWithGame);
+      console.log('Real money game started:', sessionWithGame);
+      return sessionWithGame;
 
-      console.log(`${isDemo ? 'Demo' : 'Real money'} game started:`, gameSession);
-      return {
-        ...gameSession,
-        game: nextGame
-      };
     } catch (error) {
-      console.error('Error starting game:', error);
-      toast.error('Erreur lors du démarrage du jeu');
+      console.error('Error starting real money game:', error);
+      toast.error('Une erreur technique est survenue au démarrage du jeu.');
       return null;
     }
   }, [userId, getNextGame, processBet]);
 
   // Complete a game and process winnings
-  const completeRealMoneyGame = useCallback(async (
-    score: number,
-    sessionId: string,
-    isDemo: boolean = false
-  ) => {
+  const completeRealMoneyGame = useCallback(async (score: number, sessionId: string, isDemo: boolean = false) => {
     if (!currentGameSession) {
-      console.error('No active game session');
-      return false;
+      console.error('No active game session to complete.');
+      return null;
     }
 
-    try {
-      const game = currentGameSession.game;
-      
-      // Calculate payout based on score vs max achievable score
-      let payout = 0;
-      const scoreRatio = Math.min(score / game.max_achievable_score, 1);
-      
+    const { game, bet_amount } = currentGameSession;
+    let payout = 0;
+    let isJackpot = false;
+
+    // --- Payout Calculation ---
+    if (isDemo) {
+      // Permissive demo payout
+      payout = (score / 500) * (bet_amount || 100) * 0.1;
+    } else {
+      // Real money payout logic
+      const scoreRatio = Math.min(score / (game.max_achievable_score || 20000), 1);
       if (game.result_type === 'win' && scoreRatio >= 0.5) {
-        // Player wins if they achieve at least 50% of max score on a winning game
         payout = game.expected_payout * scoreRatio;
       } else if (game.result_type === 'jackpot' && scoreRatio >= 0.8) {
-        // Jackpot if they achieve at least 80% of max score on a jackpot game
         payout = game.expected_payout;
-        
-        if (!isDemo) {
-          // Update jackpot pool
-          const { data: currentJackpot } = await supabase
-            .from('jackpot_pool')
-            .select('total_payouts')
-            .single();
-            
-          await supabase
-            .from('jackpot_pool')
-            .update({
-              current_amount: 0,
-              last_winner_id: userId,
-              last_win_amount: payout,
-              last_win_date: new Date().toISOString(),
-              total_payouts: (currentJackpot?.total_payouts || 0) + payout
-            });
+        isJackpot = true;
+      }
+    }
+    payout = Math.floor(payout);
+
+
+    // --- Handle Demo Game Completion ---
+    if (isDemo) {
+      console.log(`Demo game completed - Score: ${score}, Payout: ${payout}`);
+      setCurrentGameSession(null);
+      return { success: true, payout, isWin: payout > 0, isJackpot: false };
+    }
+
+    // --- Handle Real Money Game Completion ---
+    try {
+      // Update game session in DB
+      await supabase.from('game_sessions').update({
+        score,
+        payout_amount: payout,
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+      }).eq('id', sessionId);
+
+      // Mark pre-generated game as used
+      await completeGame(game.id, score, payout);
+
+      // Process win and jackpot if applicable
+      if (payout > 0) {
+        await processWin(payout, game.id);
+        if (isJackpot) {
+          // (Optional) Add jackpot logic here if needed
         }
       }
 
-      // Update game session
-      const { error: sessionError } = await supabase
-        .from('game_sessions')
-        .update({
-          score,
-          payout_amount: payout,
-          status: 'completed',
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', sessionId);
-
-      if (sessionError) {
-        console.error('Error updating game session:', sessionError);
-        return false;
-      }
-
-      // Mark the pre-generated game as completed
-      await completeGame(game.id, score, payout);
-
-      // Process winnings for real money games
-      if (!isDemo && payout > 0 && userId) {
-        await processWin(payout, game.id);
-      }
-
-      console.log(`Game completed - Score: ${score}, Payout: ${payout}`);
-      
+      console.log(`Real money game completed - Score: ${score}, Payout: ${payout}`);
       setCurrentGameSession(null);
-      return {
-        success: true,
-        payout,
-        isWin: payout > 0,
-        isJackpot: game.result_type === 'jackpot' && payout > 0
-      };
+      return { success: true, payout, isWin: payout > 0, isJackpot };
+
     } catch (error) {
-      console.error('Error completing game:', error);
-      toast.error('Erreur lors de la finalisation du jeu');
-      return false;
+      console.error('Error completing real money game:', error);
+      toast.error('Erreur lors de la finalisation du jeu.');
+      return null;
     }
-  }, [currentGameSession, userId, completeGame, processWin]);
+  }, [currentGameSession, userId, completeGame, processWin, supabase]);
 
   return {
     currentGameSession,

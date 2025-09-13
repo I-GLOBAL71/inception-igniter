@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -57,8 +57,14 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         <DialogHeader>
           <DialogTitle className="text-center gaming-text-gradient text-xl font-bold">
             {emailSent ? '📧 Email envoyé !' : '🔐 Connexion sécurisée'}
-          </DialogTitle>
-        </DialogHeader>
+         </DialogTitle>
+         <DialogDescription className="text-center text-muted-foreground text-sm mt-2">
+           {emailSent
+             ? `Vérifiez votre boîte email pour le lien de connexion.`
+             : 'Connectez-vous ou créez un compte pour jouer.'
+           }
+         </DialogDescription>
+       </DialogHeader>
 
         <div className="space-y-6 p-4">
           {emailSent ? (

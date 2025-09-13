@@ -1,135 +1,130 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { TrendingUp, DollarSign, Play, Eye } from 'lucide-react';
-import { useCurrency } from '@/hooks/useCurrency';
+import { PartyPopper, Trophy, DollarSign, Play, Eye } from 'lucide-react';
+import { useCurrency } from '@/hooks/useCurrency.tsx';
 
-interface DemoResultModalProps {
+interface GameResultModalProps {
+  isOpen: boolean;
   score: number;
-  lines: number;
-  multiplier: number;
-  onPlayReal: () => void;
+  payout: number;
+  isWin: boolean;
+  isJackpot: boolean;
+  isDemo: boolean;
   onPlayAgain: () => void;
+  onPlayReal: () => void;
   onClose: () => void;
 }
 
-export default function DemoResultModal({ 
-  score, 
-  lines, 
-  multiplier, 
-  onPlayReal, 
-  onPlayAgain, 
-  onClose 
-}: DemoResultModalProps) {
+export default function GameResultModal({
+  isOpen,
+  score,
+  payout,
+  isWin,
+  isJackpot,
+  isDemo,
+  onPlayAgain,
+  onPlayReal,
+  onClose,
+}: GameResultModalProps) {
   const { formatAmount } = useCurrency();
 
-  // Calculate potential earnings (base rate from admin settings)
-  const baseEarningsRate = 0.01; // EUR per 1000 points - should come from admin
-  const potentialEarnings = (score / 1000) * baseEarningsRate * multiplier;
+  if (!isOpen) {
+    return null;
+  }
+
+  const title = isDemo ? "Mode Démo Terminé" : "Partie Terminée";
+  const subTitle = isWin ? (isJackpot ? "JACKPOT !" : "Félicitations !") : "Dommage !";
+
+  const renderEarnings = () => {
+    if (isDemo) {
+      return (
+        <div className="p-4 bg-gradient-to-r from-accent/10 to-secondary/10 rounded-lg border border-accent/20">
+          <div className="flex items-center justify-center mb-2">
+            <Eye className="w-5 h-5 text-accent mr-2" />
+            <span className="font-bold text-accent">Gains simulés</span>
+          </div>
+          <div className="text-center">
+            <div className="text-3xl font-bold text-accent mb-1">
+              {formatAmount(payout)}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Ceci est une simulation. Jouez en réel pour gagner.
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className={`p-4 bg-gradient-to-r rounded-lg border ${isWin ? 'from-success/10 to-secondary/10 border-success/20' : 'from-destructive/10 to-secondary/10 border-destructive/20'}`}>
+        <div className="flex items-center justify-center mb-2">
+          {isWin ? <PartyPopper className="w-5 h-5 text-success mr-2" /> : <Trophy className="w-5 h-5 text-destructive mr-2" />}
+          <span className={`font-bold ${isWin ? 'text-success' : 'text-destructive'}`}>
+            {isWin ? 'Vos Gains' : 'Aucun Gain'}
+          </span>
+        </div>
+        <div className="text-center">
+          <div className={`text-3xl font-bold ${isWin ? 'text-success' : 'text-destructive'} mb-1`}>
+            {formatAmount(payout)}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {isJackpot ? "Vous avez décroché le jackpot !" : (isWin ? "Bien joué !" : "Meilleure chance la prochaine fois.")}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md border-2 border-accent/30">
-        <CardHeader className="text-center bg-accent/5">
-          <div className="flex items-center justify-center mb-3">
-            <Badge variant="outline" className="bg-accent/20 text-accent border-accent/30 text-sm font-bold px-4 py-2">
-              <Eye className="w-4 h-4 mr-2" />
-              🎮 MODE DÉMO TERMINÉ
-            </Badge>
-          </div>
-          <CardTitle className="gaming-text-gradient text-xl">Félicitations !</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Voici ce que vous auriez gagné en argent réel
-          </p>
+      <Card className={`w-full max-w-md border-2 ${isDemo ? 'border-accent/30' : (isWin ? 'border-success/30' : 'border-destructive/30')}`}>
+        <CardHeader className="text-center">
+          <CardTitle className="gaming-text-gradient text-2xl">{subTitle}</CardTitle>
+          <p className="text-sm text-muted-foreground">{title}</p>
         </CardHeader>
         
-        <CardContent className="space-y-6 pt-6">
-          {/* Demo Warning */}
-          <div className="p-4 bg-accent/10 border border-accent/30 rounded-lg text-center">
-            <div className="text-accent font-bold text-sm mb-2">
-              ⚠️ ATTENTION : SIMULATION DÉMO
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Aucun argent réel n'a été misé ou gagné dans cette partie
-            </div>
-          </div>
-
+        <CardContent className="space-y-6 pt-4">
           {/* Game Stats */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="text-center p-3 bg-card/50 rounded-lg">
-              <div className="text-2xl font-bold gaming-text-gradient">
-                {score.toLocaleString()}
-              </div>
-              <div className="text-sm text-muted-foreground">Score démo</div>
+          <div className="text-center p-3 bg-card/50 rounded-lg">
+            <div className="text-3xl font-bold gaming-text-gradient">
+              {score.toLocaleString()}
             </div>
-            <div className="text-center p-3 bg-card/50 rounded-lg">
-              <div className="text-2xl font-bold text-accent">
-                {lines}
-              </div>
-              <div className="text-sm text-muted-foreground">Lignes</div>
-            </div>
+            <div className="text-sm text-muted-foreground">Score Final</div>
           </div>
 
-          {/* Potential Earnings */}
-          <div className="p-4 bg-gradient-to-r from-success/10 to-secondary/10 rounded-lg border border-success/20">
-            <div className="flex items-center justify-center mb-2">
-              <TrendingUp className="w-5 h-5 text-success mr-2" />
-              <span className="font-bold text-success">Gains que vous auriez eus</span>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-success mb-1">
-                {formatAmount(potentialEarnings)}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Avec multiplicateur x{multiplier.toFixed(1)} en argent réel
-              </div>
-            </div>
-          </div>
+          {/* Earnings */}
+          {renderEarnings()}
 
-          {/* Strong Call to Action */}
-          <div className="space-y-4">
-            <div className="text-center p-3 bg-primary/5 border border-primary/20 rounded-lg">
-              <div className="text-primary font-bold text-sm mb-1">
-                💰 Prêt à gagner de l'argent réel ?
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Utilisez nos méthodes de paiement sécurisées
-              </div>
-            </div>
-
-            <Button 
-              onClick={onPlayReal} 
-              className="gaming-button-primary w-full h-14"
-              size="lg"
-            >
-              <DollarSign className="w-5 h-5 mr-2" />
-              JOUER AVEC DE L'ARGENT RÉEL
-            </Button>
-            
+          {/* Actions */}
+          <div className="space-y-3">
+            {isDemo && (
+              <Button 
+                onClick={onPlayReal} 
+                className="gaming-button-primary w-full h-12"
+                size="lg"
+              >
+                <DollarSign className="w-5 h-5 mr-2" />
+                PASSER EN MODE RÉEL
+              </Button>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <Button 
                 onClick={onPlayAgain}
                 variant="outline"
-                className="border-accent/30 hover:bg-accent/10"
+                className="h-12"
               >
-                <Play className="w-3 h-3 mr-1" />
-                Autre démo
+                <Play className="w-4 h-4 mr-2" />
+                Rejouer
               </Button>
               <Button 
                 onClick={onClose}
-                variant="outline"
+                variant="secondary"
+                className="h-12"
               >
                 Fermer
               </Button>
             </div>
-          </div>
-
-          {/* Demo Disclaimer */}
-          <div className="text-xs text-muted-foreground text-center p-3 bg-muted/50 rounded border">
-            <div className="font-medium text-accent mb-1">Mode démo uniquement</div>
-            <div>Cette partie était une simulation. Pour gagner de l'argent réel, 
-            vous devez jouer en mode argent réel avec nos partenaires de paiement sécurisés.</div>
           </div>
         </CardContent>
       </Card>

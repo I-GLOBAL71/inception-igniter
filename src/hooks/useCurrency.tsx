@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 
 export interface Currency {
   code: string;
@@ -33,44 +33,46 @@ const COUNTRY_CURRENCIES: Record<string, string> = {
   'NG': 'NGN', 'GH': 'GHS', 'KE': 'KES', 'ZA': 'ZAR', 'EG': 'EGP'
 };
 
-export function useCurrency() {
-  const [currency, setCurrency] = useState<Currency>(CURRENCIES.EUR);
-  const [baseRate, setBaseRate] = useState(1); // EUR base rate from admin
+interface CurrencyContextType {
+  currency: Currency;
+  setCurrency: (currencyCode: string) => void;
+  currencies: Record<string, Currency>;
+  baseRate: number;
+  setBaseRate: (rate: number) => void;
+  convertFromEUR: (amountInEUR: number) => number;
+  convertToEUR: (amount: number) => number;
+  formatAmount: (amountInEUR: number, options?: Intl.NumberFormatOptions) => string;
+}
+
+const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
+
+export function CurrencyProvider({ children }: { children: ReactNode }) {
+  const [currency, setCurrency] = useState<Currency>(CURRENCIES.XAF);
+  const [baseRate, setBaseRate] = useState(1);
 
   useEffect(() => {
-    // Detect user's country and set appropriate currency
-    const detectCurrency = async () => {
+    const detectCurrency = () => {
       try {
-        // Try to get country from navigator.language first
         const locale = navigator.language || 'en-US';
-        const countryCode = locale.split('-')[1] || 'US';
-        
-        // Fallback to geolocation API or IP detection
-        let detectedCountry = countryCode;
-        
-        try {
-          // This is a simple IP-based detection (you might want to use a proper service)
-          const response = await fetch('https://ipapi.co/country/');
-          if (response.ok) {
-            detectedCountry = await response.text();
-          }
-        } catch {
-          // Use locale-based detection as fallback
-        }
-
-        const currencyCode = COUNTRY_CURRENCIES[detectedCountry.toUpperCase()] || 'EUR';
+        const countryCode = (locale.split('-')[1] || 'CM').toUpperCase();
+        const currencyCode = COUNTRY_CURRENCIES[countryCode] || 'XAF';
         setCurrency(CURRENCIES[currencyCode]);
       } catch (error) {
-        console.warn('Currency detection failed, using EUR:', error);
-        setCurrency(CURRENCIES.EUR);
+        console.warn('Currency detection failed, using XAF as default:', error);
+        setCurrency(CURRENCIES.XAF);
       }
     };
-
     detectCurrency();
   }, []);
 
+  const handleSetCurrency = (currencyCode: string) => {
+    if (CURRENCIES[currencyCode]) {
+      setCurrency(CURRENCIES[currencyCode]);
+    }
+  };
+
   const convertFromEUR = (amountInEUR: number): number => {
-    return (amountInEUR * baseRate * currency.rate);
+    return amountInEUR * baseRate * currency.rate;
   };
 
   const convertToEUR = (amount: number): number => {
@@ -79,33 +81,41 @@ export function useCurrency() {
 
   const formatAmount = (amountInEUR: number, options?: Intl.NumberFormatOptions): string => {
     const convertedAmount = convertFromEUR(amountInEUR);
-    
     try {
       return new Intl.NumberFormat('fr-FR', {
         style: 'currency',
         currency: currency.code,
         minimumFractionDigits: currency.code === 'XOF' || currency.code === 'XAF' ? 0 : 2,
         maximumFractionDigits: currency.code === 'XOF' || currency.code === 'XAF' ? 0 : 2,
-        ...options
+        ...options,
       }).format(convertedAmount);
     } catch {
-      // Fallback formatting
       return `${currency.symbol}${convertedAmount.toLocaleString('fr-FR')}`;
     }
   };
 
-  return {
+  const value = {
     currency,
-    setCurrency: (currencyCode: string) => {
-      if (CURRENCIES[currencyCode]) {
-        setCurrency(CURRENCIES[currencyCode]);
-      }
-    },
+    setCurrency: handleSetCurrency,
     currencies: CURRENCIES,
     baseRate,
     setBaseRate,
     convertFromEUR,
     convertToEUR,
-    formatAmount
+    formatAmount,
   };
+
+  return (
+    <CurrencyContext.Provider value={value}>
+      {children}
+    </CurrencyContext.Provider>
+  );
+}
+
+export function useCurrency() {
+  const context = useContext(CurrencyContext);
+  if (context === undefined) {
+    throw new Error('useCurrency must be used within a CurrencyProvider');
+  }
+  return context;
 }

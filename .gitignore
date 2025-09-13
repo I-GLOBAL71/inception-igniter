@@ -22,3 +22,15 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environments
+.env
+.env.*
+!.env.example
+
+# Supabase temp files
+supabase/.temp
+
+# Documentation with sensitive info
+my-coolpay-doc-retraits.txt
+my-coolpay-doc.txt

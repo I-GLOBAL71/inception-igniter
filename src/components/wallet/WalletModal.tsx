@@ -1,114 +1,352 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { Wallet, Plus, Minus, History, CreditCard, Smartphone, ArrowUpDown } from 'lucide-react';
+import { Wallet, Plus, Minus, History, CreditCard } from 'lucide-react';
 import { useWallet } from '@/hooks/useWallet';
-import { formatDistanceToNow } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { useAuth } from '@/hooks/useAuth';
+import { useWithdrawal } from '@/hooks/useWithdrawal';
+import './payment-popup.css';
+import type { Tables } from '@/integrations/supabase/types';
+
+type WalletType = Tables<'wallets'>;
 
 interface WalletModalProps {
   isOpen: boolean;
   onClose: () => void;
-  userId: string;
 }
 
-const DEPOSIT_AMOUNTS = [1000, 2500, 5000, 10000, 25000, 50000];
-const PAYMENT_METHODS = [
-  { id: 'orange_money', name: 'Orange Money', icon: '🟠' },
-  { id: 'mtn_momo', name: 'MTN MoMo', icon: '🟡' },
-  { id: 'moov_money', name: 'Moov Money', icon: '🔵' },
-  { id: 'wave', name: 'Wave', icon: '🌊' }
-];
+type PaymentStep = 'form' | 'ussd_display' | 'otp_verification' | 'card_iframe' | 'status_polling' | 'completed' | 'failed';
 
-export default function WalletModal({ isOpen, onClose, userId }: WalletModalProps) {
-  const { wallet, transactions, loading, depositWithMyCoolPay, withdraw } = useWallet(userId);
+const WithdrawalContent = ({
+  wallet,
+  selectedOperator,
+  setSelectedOperator,
+  amount,
+  setAmount,
+  identifier,
+  setIdentifier,
+  reason,
+  setReason,
+  processing,
+  status,
+  fees,
+  totalDebit,
+  canWithdraw,
+  processWithdrawal,
+  resetForm,
+  transactionRef,
+}: ReturnType<typeof useWithdrawal> & { wallet: WalletType | null }) => {
+
+  if (status === 'polling' || status === 'processing') {
+    return (
+      <div className="status-section text-center">
+        <div className="status-icon">
+          <div className="loading-spinner"></div>
+        </div>
+        <h4>Retrait en cours de traitement...</h4>
+        <p>Veuillez patienter quelques instants.</p>
+        {transactionRef && (
+          <div className="transaction-ref">
+            <small>Référence: {transactionRef}</small>
+          </div>
+        )}
+      </div>
+    );
+  }
   
+  if (status === 'success') {
+      return (
+          <div className="final-status text-center">
+              <h4>Retrait Réussi!</h4>
+              <p>Votre solde sera mis à jour dans quelques instants.</p>
+              <Button onClick={resetForm}>Effectuer un autre retrait</Button>
+          </div>
+      )
+  }
+
+  if (status === 'failed') {
+      return (
+          <div className="final-status text-center">
+              <h4>Échec du Retrait</h4>
+              <p>Le retrait n'a pas pu être complété.</p>
+              <Button onClick={resetForm}>Réessayer</Button>
+          </div>
+      )
+  }
+
+  return (
+    <div className="popup-content">
+      <div className="user-balance">
+        <div className="balance-card">
+          <span className="balance-label">Solde disponible</span>
+          <span className="balance-amount">{wallet?.balance?.toLocaleString() || 0} FCFA</span>
+        </div>
+      </div>
+
+      <div className="withdrawal-operators">
+        <h4>Choisir le moyen de retrait</h4>
+        <div className="operator-grid">
+          <button className={`operator-method ${selectedOperator === 'CM_MOMO' ? 'selected' : ''}`} onClick={() => setSelectedOperator('CM_MOMO')}>
+            <span>MTN Mobile Money</span>
+          </button>
+          <button className={`operator-method ${selectedOperator === 'CM_OM' ? 'selected' : ''}`} onClick={() => setSelectedOperator('CM_OM')}>
+            <span>Orange Money</span>
+          </button>
+          <button className={`operator-method ${selectedOperator === 'MCP' ? 'selected' : ''}`} onClick={() => setSelectedOperator('MCP')}>
+            <span>My-CoolPay Wallet</span>
+          </button>
+        </div>
+      </div>
+
+      {selectedOperator && (
+        <div className="withdrawal-form">
+          <div className="form-group">
+            <label htmlFor="withdrawal-amount">Montant à retirer (XAF)</label>
+            <Input type="number" id="withdrawal-amount" value={amount} onChange={(e) => setAmount(e.target.value ? Number(e.target.value) : '')} min="1000" step="500" placeholder="Minimum 1000 XAF" />
+            <small className="form-hint">Montant minimum : 1000 XAF</small>
+          </div>
+
+          <div className={`form-group ${selectedOperator === 'MCP' ? 'hidden' : ''}`}>
+            <label htmlFor="withdrawal-phone">Numéro de téléphone</label>
+            <Input type="tel" id="withdrawal-phone" value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder="237xxxxxxxxx" />
+          </div>
+
+          <div className={`form-group ${selectedOperator !== 'MCP' ? 'hidden' : ''}`}>
+            <label htmlFor="mycoolpay-identifier">Identifiant My-CoolPay</label>
+            <Input type="text" id="mycoolpay-identifier" value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder="Nom d'utilisateur ou email" />
+            <small className="form-hint">Nom d'utilisateur, email ou numéro</small>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="withdrawal-reason">Motif du retrait (optionnel)</label>
+            <Input type="text" id="withdrawal-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ex: Retrait personnel" />
+          </div>
+
+          <div className="withdrawal-fees">
+            <div className="fee-breakdown">
+              <span>Montant demandé: <strong>{typeof amount === 'number' ? amount.toLocaleString() : 0} FCFA</strong></span>
+              <span>Frais estimés: <strong>{fees.toLocaleString()} FCFA</strong></span>
+              <span className="total">Total à débiter: <strong>{totalDebit.toLocaleString()} FCFA</strong></span>
+            </div>
+          </div>
+
+          <Button onClick={processWithdrawal} className="w-full h-12 gaming-button-primary" disabled={!canWithdraw || processing}>
+            {processing ? 'Traitement...' : 'Confirmer le retrait'}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+
+export default function WalletModal({ isOpen, onClose }: WalletModalProps) {
+  const { user } = useAuth();
+  const { wallet, transactions, loading, initiateMyCoolPayPayment, verifyMyCoolPayOtp, checkMyCoolPayStatus, fetchWallet, fetchTransactions } = useWallet(user?.id);
+  
+  const withdrawal = useWithdrawal(user?.id, wallet, () => {
+    fetchWallet();
+    fetchTransactions();
+  });
+
   const [activeTab, setActiveTab] = useState('overview');
+  
+  // Payment State
+  const [paymentStep, setPaymentStep] = useState<PaymentStep>('form');
   const [depositAmount, setDepositAmount] = useState(5000);
-  const [withdrawAmount, setWithdrawAmount] = useState(1000);
+  const [selectedMethod, setSelectedMethod] = useState<'orange' | 'mtn' | 'card'>('orange');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('orange_money');
+  const [otpCode, setOtpCode] = useState('');
+  const [currentTransaction, setCurrentTransaction] = useState<any>(null);
+  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
   const [processing, setProcessing] = useState(false);
 
-  const handleDeposit = async () => {
-    if (!phoneNumber || depositAmount < 500) return;
+  const DEPOSIT_AMOUNTS = [1000, 2500, 5000, 10000, 25000, 50000];
+  const PAYMENT_METHODS = [
+    { id: 'orange', name: 'Orange Money', icon: '🟠' },
+    { id: 'mtn', name: 'MTN MoMo', icon: '🟡' },
+    { id: 'card', name: 'Carte (Visa/Mastercard)', icon: <CreditCard/> },
+  ];
 
-    setProcessing(true);
-    const result = await depositWithMyCoolPay(depositAmount, phoneNumber);
-    
-    if (result.success) {
-      setActiveTab('overview');
-      setPhoneNumber('');
-    }
+  const resetPaymentState = () => {
+    setPaymentStep('form');
+    setPhoneNumber('');
+    setOtpCode('');
+    setCurrentTransaction(null);
+    if (pollInterval) clearInterval(pollInterval);
+    setPollInterval(null);
     setProcessing(false);
   };
 
-  const handleWithdraw = async () => {
-    if (!phoneNumber || withdrawAmount < 500) return;
+  const handleModalClose = () => {
+    resetPaymentState();
+    withdrawal.resetForm();
+    onClose();
+  };
 
+  const initiatePayment = async () => {
+    if (!user || (selectedMethod !== 'card' && !phoneNumber)) {
+        alert("Veuillez saisir un numéro de téléphone pour ce mode de paiement.");
+        return;
+    }
     setProcessing(true);
-    const result = await withdraw(withdrawAmount, selectedPaymentMethod, 'mycoolpay', { phone_number: phoneNumber });
-    
-    if (result.success) {
-      setActiveTab('overview');
-      setPhoneNumber('');
-    }
-    setProcessing(false);
-  };
 
-  const getTransactionIcon = (type: string) => {
-    switch (type) {
-      case 'deposit': return <Plus className="w-4 h-4 text-success" />;
-      case 'withdrawal': return <Minus className="w-4 h-4 text-destructive" />;
-      case 'game_bet': return <ArrowUpDown className="w-4 h-4 text-warning" />;
-      case 'game_win': return <Plus className="w-4 h-4 text-success" />;
-      default: return <ArrowUpDown className="w-4 h-4" />;
-    }
-  };
-
-  const getTransactionLabel = (type: string) => {
-    switch (type) {
-      case 'deposit': return 'Dépôt';
-      case 'withdrawal': return 'Retrait';
-      case 'game_bet': return 'Mise de jeu';
-      case 'game_win': return 'Gain de jeu';
-      default: return type;
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    const variants = {
-      completed: 'default',
-      pending: 'secondary',
-      failed: 'destructive',
-      cancelled: 'outline'
-    } as const;
-
-    const labels = {
-      completed: 'Terminé',
-      pending: 'En cours',
-      failed: 'Échoué',
-      cancelled: 'Annulé'
+    const paymentData = {
+      amount: depositAmount,
+      reason: `Deposit for ${user.email}`,
+      reference: `TX-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      customerName: user.email,
+      customerEmail: user.email,
     };
 
-    return (
-      <Badge variant={variants[status as keyof typeof variants] || 'outline'}>
-        {labels[status as keyof typeof labels] || status}
-      </Badge>
-    );
+    const result = await initiateMyCoolPayPayment(paymentData, selectedMethod, phoneNumber);
+    
+    if (result.success) {
+      setCurrentTransaction(result);
+      if (selectedMethod === 'card') {
+        setPaymentStep('card_iframe');
+      } else if (result.action === 'REQUIRE_OTP') {
+        setPaymentStep('otp_verification');
+      } else if (result.action === 'PENDING' && result.ussd) {
+        setPaymentStep('ussd_display');
+        startPolling(result.transaction_ref);
+      }
+    } else {
+      setPaymentStep('failed');
+    }
+    setProcessing(false);
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!currentTransaction?.transaction_ref || !otpCode) return;
+    setProcessing(true);
+    const result = await verifyMyCoolPayOtp(currentTransaction.transaction_ref, otpCode);
+    if (result.success && result.action === 'PENDING') {
+      setCurrentTransaction(prev => ({ ...prev, ussd: result.ussd }));
+      setPaymentStep('ussd_display');
+      startPolling(result.transaction_ref);
+    } else {
+      alert('Code OTP invalide ou expiré.');
+    }
+    setProcessing(false);
+  };
+
+  const startPolling = (transactionRef: string) => {
+    const interval = setInterval(async () => {
+      const statusResult = await checkMyCoolPayStatus(transactionRef);
+      if (statusResult.success) {
+        if (statusResult.transaction_status === 'SUCCESS') {
+          setPaymentStep('completed');
+          fetchWallet();
+          fetchTransactions();
+          clearInterval(interval);
+        } else if (['FAILED', 'CANCELED'].includes(statusResult.transaction_status)) {
+          setPaymentStep('failed');
+          clearInterval(interval);
+        }
+      }
+    }, 5000);
+    setPollInterval(interval);
+  };
+  
+  useEffect(() => {
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [pollInterval]);
+
+  const renderDepositContent = () => {
+    switch (paymentStep) {
+      case 'form':
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Montant à recharger</label>
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                {DEPOSIT_AMOUNTS.map((amount) => (
+                  <Button key={amount} variant={depositAmount === amount ? "default" : "outline"} onClick={() => setDepositAmount(amount)}>
+                    {amount.toLocaleString()} FCFA
+                  </Button>
+                ))}
+              </div>
+              <Input type="number" placeholder="Montant personnalisé" value={depositAmount} onChange={(e) => setDepositAmount(Number(e.target.value))} min={500} />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">Méthode de paiement</label>
+              <div className="grid grid-cols-3 gap-2">
+                {PAYMENT_METHODS.map((method) => (
+                  <Button key={method.id} variant={selectedMethod === method.id ? "default" : "outline"} onClick={() => setSelectedMethod(method.id as any)}>
+                    {method.icon} {method.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            {selectedMethod !== 'card' && (
+              <div>
+                <label className="text-sm font-medium mb-2 block">Numéro de téléphone</label>
+                <Input type="tel" placeholder="Ex: 237xxxxxxxxx" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} required />
+              </div>
+            )}
+            <Button onClick={initiatePayment} disabled={processing} className="w-full h-12 gaming-button-primary">
+              {processing ? 'Traitement...' : `Recharger ${depositAmount.toLocaleString()} FCFA`}
+            </Button>
+          </div>
+        );
+      case 'otp_verification':
+        return (
+          <div className="payment-form text-center">
+            <p>Un code de vérification a été envoyé à votre téléphone.</p>
+            <Input type="text" placeholder="Code de vérification" value={otpCode} onChange={e => setOtpCode(e.target.value)} required />
+            <Button onClick={handleVerifyOtp} disabled={processing}>{processing ? 'Vérification...' : 'Vérifier'}</Button>
+            <Button variant="link" onClick={resetPaymentState}>Annuler</Button>
+          </div>
+        );
+      case 'ussd_display':
+        return (
+          <div className="ussd-section text-center">
+            <h4>Composez ce code sur votre téléphone :</h4>
+            <div className="ussd-code">{currentTransaction?.ussd}</div>
+            <div className="payment-status"><div className="loading-spinner"></div><span>Vérification du paiement...</span></div>
+            <Button variant="link" onClick={resetPaymentState}>Annuler</Button>
+          </div>
+        );
+      case 'card_iframe':
+        return (
+          <div className="card-frame">
+            <iframe src={currentTransaction?.payment_url} frameBorder="0" title="payment"></iframe>
+            <Button variant="link" onClick={resetPaymentState} className="mt-2">Annuler</Button>
+          </div>
+        );
+      case 'completed':
+        return (
+          <div className="final-status text-center">
+            <h4>Paiement Réussi!</h4>
+            <p>Votre solde a été mis à jour.</p>
+            <Button onClick={resetPaymentState}>Effectuer un autre dépôt</Button>
+          </div>
+        );
+      case 'failed':
+        return (
+          <div className="final-status text-center">
+            <h4>Échec du Paiement</h4>
+            <p>Le paiement n'a pas pu être complété.</p>
+            <Button onClick={resetPaymentState}>Réessayer</Button>
+          </div>
+        );
+      default:
+        return null;
+    }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleModalClose}>
       <DialogContent className="gaming-card max-w-2xl mx-auto max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 gaming-text-gradient text-xl font-bold">
-            <Wallet className="w-6 h-6" />
-            Mon Portefeuille
+            <Wallet className="w-6 h-6" /> Mon Portefeuille
           </DialogTitle>
         </DialogHeader>
 
@@ -116,273 +354,43 @@ export default function WalletModal({ isOpen, onClose, userId }: WalletModalProp
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview">Vue d'ensemble</TabsTrigger>
             <TabsTrigger value="deposit">Recharger</TabsTrigger>
-            <TabsTrigger value="withdraw">Retirer</TabsTrigger>
+            <TabsTrigger value="withdraw">Retrait</TabsTrigger>
             <TabsTrigger value="history">Historique</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6 mt-6">
             <Card className="gaming-card p-6 text-center">
-              <div className="mb-4">
-                <div className="text-sm text-muted-foreground mb-2">Solde disponible</div>
-                <div className="text-4xl font-bold gaming-text-gradient">
-                  {loading ? '...' : `${wallet?.balance?.toLocaleString() || 0} FCFA`}
-                </div>
+              <div className="text-sm text-muted-foreground mb-2">Solde disponible</div>
+              <div className="text-4xl font-bold gaming-text-gradient">
+                {loading ? '...' : `${wallet?.balance?.toLocaleString() || 0} FCFA`}
               </div>
-              <div className="flex gap-3 justify-center">
-                <Button 
-                  onClick={() => setActiveTab('deposit')}
-                  className="gaming-button-primary"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Recharger
-                </Button>
-                <Button 
-                  onClick={() => setActiveTab('withdraw')}
-                  variant="outline"
-                  disabled={!wallet || wallet.balance < 500}
-                >
-                  <Minus className="w-4 h-4 mr-2" />
-                  Retirer
-                </Button>
-              </div>
-            </Card>
-
-            {/* Recent transactions */}
-            <div>
-              <h3 className="font-semibold mb-3">Transactions récentes</h3>
-              <div className="space-y-2">
-                {transactions.slice(0, 5).map((transaction) => (
-                  <Card key={transaction.id} className="gaming-card p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        {getTransactionIcon(transaction.type)}
-                        <div>
-                          <div className="font-medium text-sm">
-                            {getTransactionLabel(transaction.type)}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {formatDistanceToNow(new Date(transaction.created_at), { 
-                              addSuffix: true, 
-                              locale: fr 
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className={`font-semibold ${
-                          transaction.amount > 0 ? 'text-success' : 'text-destructive'
-                        }`}>
-                          {transaction.amount > 0 ? '+' : ''}{transaction.amount.toLocaleString()} FCFA
-                        </div>
-                        {getStatusBadge(transaction.status)}
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-                {transactions.length === 0 && (
-                  <Card className="gaming-card p-6 text-center text-muted-foreground">
-                    Aucune transaction pour le moment
-                  </Card>
-                )}
-              </div>
-            </div>
-          </TabsContent>
+              <div className="flex gap-3 justify-center mt-4">
+                <Button onClick={() => setActiveTab('deposit')} className="gaming-button-primary">
+                 <Plus className="w-4 h-4 mr-2" /> Recharger
+               </Button>
+               <Button onClick={() => setActiveTab('withdraw')} className="gaming-button-secondary">
+                 <Minus className="w-4 h-4 mr-2" /> Retrait
+               </Button>
+             </div>
+           </Card>
+         </TabsContent>
 
           <TabsContent value="deposit" className="space-y-6 mt-6">
             <Card className="gaming-card p-6">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <CreditCard className="w-5 h-5" />
-                Recharger votre compte
-              </h3>
-              
-              {/* Amount Selection */}
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Montant à recharger</label>
-                  <div className="grid grid-cols-3 gap-2 mb-3">
-                    {DEPOSIT_AMOUNTS.map((amount) => (
-                      <Button
-                        key={amount}
-                        variant={depositAmount === amount ? "default" : "outline"}
-                        className="h-12"
-                        onClick={() => setDepositAmount(amount)}
-                      >
-                        {amount.toLocaleString()} FCFA
-                      </Button>
-                    ))}
-                  </div>
-                  <Input
-                    type="number"
-                    placeholder="Montant personnalisé"
-                    value={depositAmount}
-                    onChange={(e) => setDepositAmount(Number(e.target.value))}
-                    min={500}
-                    max={100000}
-                  />
-                </div>
-
-                {/* Payment Method */}
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Méthode de paiement</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {PAYMENT_METHODS.map((method) => (
-                      <Button
-                        key={method.id}
-                        variant={selectedPaymentMethod === method.id ? "default" : "outline"}
-                        className="h-12 justify-start"
-                        onClick={() => setSelectedPaymentMethod(method.id)}
-                      >
-                        <span className="mr-2">{method.icon}</span>
-                        {method.name}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Phone Number */}
-                <div>
-                  <label className="text-sm font-medium mb-2 block">
-                    <Smartphone className="w-4 h-4 inline mr-1" />
-                    Numéro de téléphone
-                  </label>
-                  <Input
-                    type="tel"
-                    placeholder="Ex: +225 07 XX XX XX XX"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                  />
-                </div>
-
-                <Button
-                  onClick={handleDeposit}
-                  disabled={processing || !phoneNumber || depositAmount < 500}
-                  className="w-full h-12 gaming-button-primary"
-                >
-                  {processing ? 'Traitement...' : `Recharger ${depositAmount.toLocaleString()} FCFA`}
-                </Button>
-              </div>
+              {renderDepositContent()}
             </Card>
+          </TabsContent>
+          
+          <TabsContent value="history" className="space-y-4 mt-6">
+            {/* History content will be added here */}
           </TabsContent>
 
           <TabsContent value="withdraw" className="space-y-6 mt-6">
             <Card className="gaming-card p-6">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <Minus className="w-5 h-5" />
-                Retirer vos gains
-              </h3>
-              
-              <div className="space-y-4">
-                <div className="bg-muted/50 p-3 rounded-lg">
-                  <div className="text-sm text-muted-foreground">Solde disponible</div>
-                  <div className="text-xl font-bold text-success">
-                    {wallet?.balance?.toLocaleString() || 0} FCFA
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Montant à retirer</label>
-                  <Input
-                    type="number"
-                    placeholder="Montant minimum: 500 FCFA"
-                    value={withdrawAmount}
-                    onChange={(e) => setWithdrawAmount(Number(e.target.value))}
-                    min={500}
-                    max={wallet?.balance || 0}
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Méthode de retrait</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {PAYMENT_METHODS.map((method) => (
-                      <Button
-                        key={method.id}
-                        variant={selectedPaymentMethod === method.id ? "default" : "outline"}
-                        className="h-12 justify-start"
-                        onClick={() => setSelectedPaymentMethod(method.id)}
-                      >
-                        <span className="mr-2">{method.icon}</span>
-                        {method.name}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium mb-2 block">
-                    <Smartphone className="w-4 h-4 inline mr-1" />
-                    Numéro de téléphone
-                  </label>
-                  <Input
-                    type="tel"
-                    placeholder="Ex: +225 07 XX XX XX XX"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                  />
-                </div>
-
-                <Button
-                  onClick={handleWithdraw}
-                  disabled={processing || !phoneNumber || withdrawAmount < 500 || (wallet && withdrawAmount > wallet.balance)}
-                  className="w-full h-12 gaming-button-secondary"
-                >
-                  {processing ? 'Traitement...' : `Retirer ${withdrawAmount.toLocaleString()} FCFA`}
-                </Button>
-              </div>
+              <WithdrawalContent {...withdrawal} wallet={wallet} />
             </Card>
           </TabsContent>
 
-          <TabsContent value="history" className="space-y-4 mt-6">
-            <div className="flex items-center gap-2 mb-4">
-              <History className="w-5 h-5" />
-              <h3 className="font-semibold">Historique des transactions</h3>
-            </div>
-            
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {transactions.map((transaction) => (
-                <Card key={transaction.id} className="gaming-card p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {getTransactionIcon(transaction.type)}
-                      <div>
-                        <div className="font-medium">
-                          {getTransactionLabel(transaction.type)}
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {new Date(transaction.created_at).toLocaleDateString('fr-FR', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </div>
-                        {transaction.payment_method && (
-                          <div className="text-xs text-muted-foreground">
-                            {transaction.payment_method}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className={`font-semibold ${
-                        transaction.amount > 0 ? 'text-success' : 'text-destructive'
-                      }`}>
-                        {transaction.amount > 0 ? '+' : ''}{transaction.amount.toLocaleString()} FCFA
-                      </div>
-                      {getStatusBadge(transaction.status)}
-                    </div>
-                  </div>
-                </Card>
-              ))}
-              {transactions.length === 0 && (
-                <Card className="gaming-card p-6 text-center text-muted-foreground">
-                  <History className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  Aucune transaction trouvée
-                </Card>
-              )}
-            </div>
-          </TabsContent>
         </Tabs>
       </DialogContent>
     </Dialog>

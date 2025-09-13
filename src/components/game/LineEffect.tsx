@@ -1,86 +1,94 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import Brick from './effects/Brick';
+import Coin from './effects/Coin';
+
+interface Effect {
+  id: string;
+  Component: React.FC<any>;
+  props: any;
+}
 
 interface LineEffectProps {
-  lines: number[];
+  clearedLines: { y: number; row: (string | number)[] }[];
+  cellSize: number;
+  targetPosition: { x: number; y: number };
   onComplete: () => void;
 }
 
-export default function LineEffect({ lines, onComplete }: LineEffectProps) {
-  const [phase, setPhase] = useState<'flash' | 'clear' | 'complete'>('flash');
+const LineEffect: React.FC<LineEffectProps> = ({ clearedLines, cellSize, targetPosition, onComplete }) => {
+  const [effects, setEffects] = useState<Effect[]>([]);
 
   useEffect(() => {
-    if (lines.length === 0) {
-      onComplete();
-      return;
+    if (clearedLines.length > 0) {
+      let newEffects: Effect[] = [];
+      clearedLines.forEach(({ y, row }) => {
+        row.forEach((cell, x) => {
+          if (cell !== 0) { // A block was here
+            const centerX = (x + 0.5) * cellSize;
+            const centerY = (y + 0.5) * cellSize;
+
+            // Add brick explosion effects
+            for (let i = 0; i < 10; i++) {
+              const id = `brick-${y}-${x}-${i}-${Date.now()}`;
+              newEffects.push({
+                id,
+                Component: Brick,
+                props: {
+                  x: centerX,
+                  y: centerY,
+                  color: cell as string, // Assuming cell stores color
+                  onComplete: () => removeEffect(id),
+                },
+              });
+            }
+
+            // Add coin collection effects
+            for (let i = 0; i < 3; i++) {
+              const id = `coin-${y}-${x}-${i}-${Date.now()}`;
+              newEffects.push({
+                id,
+                Component: Coin,
+                props: {
+                  x: centerX,
+                  y: centerY,
+                  targetX: targetPosition.x,
+                  targetY: targetPosition.y,
+                  delay: i * 50 + (y * 20), // Stagger the animation start
+                  onComplete: () => removeEffect(id),
+                },
+              });
+            }
+          }
+        });
+      });
+
+      setEffects(newEffects);
+
+      // Call onComplete after a delay to allow animations to play
+      const maxDelay = (clearedLines.length - 1) * 20 + 3 * 50;
+      const animationDuration = 1000; // Corresponds to coin animation
+      const totalDuration = maxDelay + animationDuration;
+      
+      const timer = setTimeout(() => {
+        onComplete();
+        setEffects([]); // Clear effects after animation
+      }, totalDuration);
+      
+      return () => clearTimeout(timer);
     }
+  }, [clearedLines, onComplete, cellSize, targetPosition]);
 
-    // Flash phase
-    const flashTimer = setTimeout(() => {
-      setPhase('clear');
-    }, 300);
-
-    // Clear phase
-    const clearTimer = setTimeout(() => {
-      setPhase('complete');
-      onComplete();
-    }, 600);
-
-    return () => {
-      clearTimeout(flashTimer);
-      clearTimeout(clearTimer);
-    };
-  }, [lines, onComplete]);
-
-  if (lines.length === 0) return null;
+  const removeEffect = (id: string) => {
+    setEffects(prev => prev.filter(effect => effect.id !== id));
+  };
 
   return (
     <div className="absolute inset-0 pointer-events-none">
-      {lines.map((lineY, index) => (
-        <div
-          key={lineY}
-          className={`absolute left-0 right-0 h-6 ${
-            phase === 'flash' 
-              ? 'bg-white animate-pulse' 
-              : phase === 'clear'
-              ? 'bg-gradient-to-r from-primary via-secondary to-accent animate-pulse opacity-75'
-              : 'opacity-0'
-          }`}
-          style={{
-            top: `${(lineY + 1) * 24}px`, // Adjust based on your cell height
-            animationDelay: `${index * 50}ms`,
-            animationDuration: phase === 'flash' ? '150ms' : '300ms'
-          }}
-        >
-          {phase === 'clear' && (
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-50 animate-ping" />
-          )}
-          {lines.length === 4 && phase === 'clear' && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-white font-bold text-lg animate-bounce shadow-lg">
-                TETRIS!
-              </span>
-            </div>
-          )}
-        </div>
+      {effects.map(({ id, Component, props }) => (
+        <Component key={id} {...props} />
       ))}
-      
-      {/* Particle effects for Tetris */}
-      {lines.length === 4 && phase === 'clear' && (
-        <div className="absolute inset-0 overflow-hidden">
-          {Array.from({ length: 20 }, (_, i) => (
-            <div
-              key={i}
-              className="absolute w-2 h-2 bg-secondary rounded-full animate-ping"
-              style={{
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 500}ms`,
-                animationDuration: `${500 + Math.random() * 1000}ms`
-              }}
-            />
-          ))}
-        </div>
-      )}
     </div>
   );
-}
+};
+
+export default LineEffect;

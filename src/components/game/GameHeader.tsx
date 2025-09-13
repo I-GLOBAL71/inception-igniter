@@ -1,13 +1,91 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Coins, Trophy, Settings, User } from 'lucide-react';
+import { Coins, Trophy, Settings, User as UserIcon, LogOut } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
+import { useAuth } from '@/hooks/useAuth';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { User } from '@supabase/supabase-js';
 
 interface GameHeaderProps {
   balance?: number;
   demoMode?: boolean;
 }
 
+const UserNav = ({ user, signOut }: { user: User; signOut: () => Promise<any> }) => {
+  const isMobile = useIsMobile();
+  const [isMenuOpen, setIsMenuOpen] = React.useState(false);
+
+  const handleSignOut = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsMenuOpen(false);
+    await signOut();
+  };
+
+  if (isMobile) {
+    return (
+      <Sheet open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+        <SheetTrigger asChild>
+          <Button size="sm" variant="ghost" className="p-2">
+            <UserIcon className="w-4 h-4" />
+          </Button>
+        </SheetTrigger>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Mon Compte</SheetTitle>
+            <SheetDescription>{user.email}</SheetDescription>
+          </SheetHeader>
+          <div className="py-4">
+            <Button
+              onClick={handleSignOut}
+              className="w-full justify-start"
+              variant="ghost"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Déconnexion</span>
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  return (
+    <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant="ghost" className="p-2">
+          <UserIcon className="w-4 h-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-56">
+        <DropdownMenuLabel>{user.email}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={handleSignOut}>
+          <LogOut className="mr-2 h-4 w-4" />
+          <span>Déconnexion</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
+
 export default function GameHeader({ balance = 0, demoMode = true }: GameHeaderProps) {
+  const { user, signOut, loading } = useAuth();
+
   return (
     <header className="w-full gaming-card p-4 mb-6">
       <div className="flex items-center justify-between">
@@ -39,14 +117,14 @@ export default function GameHeader({ balance = 0, demoMode = true }: GameHeaderP
           </div>
 
           {/* User Menu */}
-          <div className="flex items-center space-x-2">
-            <Button size="sm" variant="ghost" className="p-2">
-              <Settings className="w-4 h-4" />
-            </Button>
-            <Button size="sm" variant="ghost" className="p-2">
-              <User className="w-4 h-4" />
-            </Button>
-          </div>
+          {!loading && user && (
+            <div className="flex items-center space-x-2">
+              <Button size="sm" variant="ghost" className="p-2">
+                <Settings className="w-4 h-4" />
+              </Button>
+              <UserNav user={user} signOut={signOut} />
+            </div>
+          )}
         </div>
       </div>
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Trophy, Play, Coins, Zap, Gift } from 'lucide-react';
-import { useCurrency } from '@/hooks/useCurrency';
+import { useCurrency } from '@/hooks/useCurrency.tsx';
 
 interface LandingOverlayProps {
   onStartDemo: () => void;

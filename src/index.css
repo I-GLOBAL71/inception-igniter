@@ -164,3 +164,83 @@
       hsl(var(--surface)) 100%);
   }
 }
+.particle {
+  animation: explode 1.2s ease-out forwards;
+}
+
+@keyframes explode {
+  0% {
+    transform: translate(0, 0) rotate(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--vx), var(--vy)) rotate(var(--rot)) scale(0);
+    opacity: 0;
+  }
+}
+
+.coin {
+  width: 20px;
+  height: 20px;
+  perspective: 300px;
+  animation: coin-arc 1.2s cubic-bezier(0.3, 0, 0.4, 1) forwards;
+}
+
+.coin-inner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  animation: coin-spin 1.2s linear infinite;
+  background-color: #fbbF24;
+  border-radius: 50%;
+  border: 2px solid #f59e0b;
+}
+
+@keyframes coin-arc {
+  0% {
+    transform: translateY(0) scale(0.8);
+    opacity: 1;
+  }
+  30% {
+    transform: translateY(-80px) scale(1.2);
+  }
+  100% {
+    transform: translateY(100px) scale(0);
+    opacity: 0;
+  }
+}
+
+@keyframes coin-spin {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(360deg);
+  }
+}
+@keyframes coin-animation {
+  0% {
+    transform: translateY(0) scale(1) rotateY(0deg);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-80px) scale(1.2) rotateY(180deg);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-150px) scale(0.5) rotateY(360deg);
+    opacity: 0;
+  }
+}
+
+.coin-particle {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  background: radial-gradient(circle at 70% 30%, #fef08a, #facc15 50%, #d97706);
+  border-radius: 50%;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3), inset 0 1px 0px rgba(255,255,255,0.5);
+  animation: coin-animation 1s ease-out forwards;
+  will-change: transform, opacity;
+}

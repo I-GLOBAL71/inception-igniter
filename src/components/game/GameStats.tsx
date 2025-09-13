@@ -1,6 +1,6 @@
 import React from 'react';
 import { TrendingUp, Target, Zap, Star } from 'lucide-react';
-import { useCurrency } from '@/hooks/useCurrency';
+import { useCurrency } from '@/hooks/useCurrency.tsx';
 
 interface GameStatsProps {
   score: number;

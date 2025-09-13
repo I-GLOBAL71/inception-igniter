@@ -3,23 +3,29 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface MyCoolPayRequest {
-  action: 'process_payin' | 'process_payout' | 'check_status';
-  amount?: number;
-  currency?: string;
-  user_id?: string;
-  transaction_id?: string;
-  payment_method?: string;
-  phone_number?: string;
+interface PaymentRequest {
+  action: 'initiate_payment' | 'authorize_payment' | 'check_status';
+  paymentData: {
+    amount: number;
+    reason: string;
+    reference: string;
+    customerName?: string;
+    customerEmail?: string;
+  };
+  method: 'orange' | 'mtn' | 'card';
+  phoneNumber?: string;
+  otpCode?: string;
+  transaction_ref?: string;
+  user_id: string;
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
@@ -28,227 +34,158 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { action, amount, currency = 'XOF', user_id, transaction_id, payment_method, phone_number } = await req.json() as MyCoolPayRequest;
+    const body: PaymentRequest = await req.json();
+    const { action, user_id } = body;
 
-    // Get MyCoolPay API key from admin settings
-    const { data: adminSettings } = await supabase
+    const { data: adminSettings, error: settingsError } = await supabase
       .from('admin_settings')
-      .select('value')
-      .eq('key', 'mycoolpay_api_key')
-      .single();
+      .select('key, value')
+      .in('key', ['mycoolpay_private_key', 'mycoolpay_public_key']);
 
-    if (!adminSettings?.value) {
-      throw new Error('MyCoolPay API key not configured');
+    if (settingsError) {
+      throw new Error(`Failed to fetch MyCoolPay settings: ${settingsError.message}`);
     }
 
-    const apiKey = adminSettings.value;
-    const baseUrl = 'https://my-coolpay.com/api/v1';
+    const privateKey = adminSettings?.find(s => s.key === 'mycoolpay_private_key')?.value;
+    const publicKey = adminSettings?.find(s => s.key === 'mycoolpay_public_key')?.value;
 
-    console.log(`Processing MyCoolPay ${action} request for user ${user_id}`);
+    if (!privateKey || !publicKey) {
+      throw new Error('MyCoolPay API keys are not configured');
+    }
+
+    console.log(`Verifying updated MyCoolPay Keys:`, { publicKey, privateKey: privateKey ? '********' : 'Not Found' });
+
+    const baseUrl = `https://my-coolpay.com/api/${publicKey}`;
 
     switch (action) {
-      case 'process_payin':
-        if (!user_id || !amount || !phone_number) {
-          throw new Error('Missing required fields for payin');
-        }
+      case 'initiate_payment': {
+        const { paymentData, method, phoneNumber } = body;
 
-        // Create transaction record
-        const { data: transaction, error: transactionError } = await supabase
-          .from('transactions')
-          .insert({
-            user_id,
-            wallet_id: (await supabase.from('wallets').select('id').eq('user_id', user_id).single()).data?.id,
-            type: 'deposit',
-            amount,
-            currency,
-            payment_method,
-            payment_gateway: 'mycoolpay',
-            status: 'pending'
-          })
-          .select()
-          .single();
+        const apiPayload = {
+          transaction_amount: paymentData.amount,
+          transaction_currency: 'XAF',
+          transaction_reason: paymentData.reason,
+          app_transaction_ref: paymentData.reference,
+          customer_name: paymentData.customerName,
+          customer_email: paymentData.customerEmail,
+          customer_lang: 'fr',
+          ...(phoneNumber && { customer_phone_number: phoneNumber }),
+        };
 
-        if (transactionError) {
-          throw new Error(`Transaction creation failed: ${transactionError.message}`);
-        }
+        const endpoint = method === 'card' ? 'paylink' : 'payin';
+        const url = `${baseUrl}/${endpoint}`;
 
-        // Initiate payment with MyCoolPay
-        const payinResponse = await fetch(`${baseUrl}/payments`, {
+        const response = await fetch(url, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${privateKey}`,
+            'X-App-Key': publicKey
           },
-          body: JSON.stringify({
-            amount,
-            currency,
-            phone_number,
-            reference: transaction.id,
-            callback_url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/mycoolpay-webhook`,
-            description: 'Tetris Game Deposit'
-          }),
+          body: JSON.stringify(apiPayload),
         });
 
-        if (!payinResponse.ok) {
-          await supabase
-            .from('transactions')
-            .update({ status: 'failed' })
-            .eq('id', transaction.id);
-          
-          throw new Error(`Payment failed: ${await payinResponse.text()}`);
+        if (!response.ok) {
+          const errorBody = await response.text();
+          throw new Error(`MyCoolPay API error: ${errorBody}`);
         }
 
-        const payinData = await payinResponse.json();
+        const result = await response.json();
+        
+        // Store transaction in DB
+        const { data: wallet } = await supabase.from('wallets').select('id').eq('user_id', user_id).single();
+        if (!wallet) throw new Error('User wallet not found');
 
-        // Update transaction with external ID
-        await supabase
-          .from('transactions')
-          .update({ 
-            external_transaction_id: payinData.transaction_id,
-            metadata: payinData 
-          })
-          .eq('id', transaction.id);
-
-        console.log('Payment initiated:', payinData);
-
-        return new Response(JSON.stringify({ 
-          success: true, 
-          transaction_id: transaction.id,
-          data: payinData 
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-
-      case 'process_payout':
-        if (!user_id || !amount || !phone_number) {
-          throw new Error('Missing required fields for payout');
-        }
-
-        // Check user balance
-        const { data: wallet } = await supabase
-          .from('wallets')
-          .select('*')
-          .eq('user_id', user_id)
-          .single();
-
-        if (!wallet || wallet.balance < amount) {
-          throw new Error('Insufficient balance');
-        }
-
-        // Create withdrawal transaction
-        const { data: withdrawalTransaction, error: withdrawalError } = await supabase
-          .from('transactions')
-          .insert({
+        await supabase.from('transactions').insert({
             user_id,
             wallet_id: wallet.id,
-            type: 'withdrawal',
-            amount: -amount,
-            currency,
-            payment_method,
+            type: 'deposit',
+            amount: paymentData.amount,
+            currency: 'XAF',
+            payment_method: method,
             payment_gateway: 'mycoolpay',
-            status: 'pending'
-          })
-          .select()
-          .single();
+            status: 'pending',
+            external_transaction_id: result.transaction_ref,
+            metadata: result,
+        });
 
-        if (withdrawalError) {
-          throw new Error(`Withdrawal transaction creation failed: ${withdrawalError.message}`);
+        return new Response(JSON.stringify(result), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      case 'authorize_payment': {
+        const { transaction_ref, otpCode } = body;
+        if (!transaction_ref || !otpCode) {
+          throw new Error('Missing transaction reference or OTP code');
         }
 
-        // Process payout with MyCoolPay
-        const payoutResponse = await fetch(`${baseUrl}/payouts`, {
+        const response = await fetch(`${baseUrl}/payin/authorize`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${privateKey}`,
+            'X-App-Key': publicKey
           },
-          body: JSON.stringify({
-            amount,
-            currency,
-            phone_number,
-            reference: withdrawalTransaction.id,
-            callback_url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/mycoolpay-webhook`,
-            description: 'Tetris Game Withdrawal'
-          }),
+          body: JSON.stringify({ transaction_ref, code: otpCode }),
         });
 
-        if (!payoutResponse.ok) {
-          await supabase
-            .from('transactions')
-            .update({ status: 'failed' })
-            .eq('id', withdrawalTransaction.id);
-          
-          throw new Error(`Payout failed: ${await payoutResponse.text()}`);
+        if (!response.ok) {
+          const errorBody = await response.text();
+          throw new Error(`OTP verification failed: ${errorBody}`);
         }
 
-        const payoutData = await payoutResponse.json();
-
-        // Update transaction and deduct from wallet
-        await supabase
-          .from('transactions')
-          .update({ 
-            external_transaction_id: payoutData.transaction_id,
-            metadata: payoutData 
-          })
-          .eq('id', withdrawalTransaction.id);
-
-        // Deduct from wallet
-        await supabase
-          .from('wallets')
-          .update({ balance: wallet.balance - amount })
-          .eq('id', wallet.id);
-
-        console.log('Payout initiated:', payoutData);
-
-        return new Response(JSON.stringify({ 
-          success: true, 
-          transaction_id: withdrawalTransaction.id,
-          data: payoutData 
-        }), {
+        const result = await response.json();
+        return new Response(JSON.stringify(result), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
+      }
 
-      case 'check_status':
-        if (!transaction_id) {
-          throw new Error('Transaction ID required');
+      case 'check_status': {
+        const { transaction_ref } = body;
+        if (!transaction_ref) {
+          throw new Error('Transaction reference is required');
         }
 
-        const { data: statusTransaction } = await supabase
-          .from('transactions')
-          .select('*')
-          .eq('id', transaction_id)
-          .single();
-
-        if (!statusTransaction?.external_transaction_id) {
-          throw new Error('External transaction ID not found');
-        }
-
-        const statusResponse = await fetch(`${baseUrl}/payments/${statusTransaction.external_transaction_id}/status`, {
+        const response = await fetch(`${baseUrl}/checkStatus/${transaction_ref}`, {
           headers: {
-            'Authorization': `Bearer ${apiKey}`,
+            'Authorization': `Bearer ${privateKey}`,
+            'X-App-Key': publicKey
           },
         });
 
-        if (!statusResponse.ok) {
-          throw new Error(`Status check failed: ${await statusResponse.text()}`);
+        if (!response.ok) {
+          const errorBody = await response.text();
+          throw new Error(`Status check failed: ${errorBody}`);
         }
 
-        const statusData = await statusResponse.json();
-        console.log('Transaction status:', statusData);
+        const result = await response.json();
 
-        return new Response(JSON.stringify({ success: true, data: statusData }), {
+        // Update transaction status in DB
+        if (result.status === 'success') {
+            const dbStatus = result.transaction_status === 'SUCCESS' ? 'completed' : 
+                             result.transaction_status === 'FAILED' ? 'failed' :
+                             result.transaction_status === 'CANCELED' ? 'cancelled' : 'pending';
+
+            if (dbStatus !== 'pending') {
+                await supabase
+                    .from('transactions')
+                    .update({ status: dbStatus })
+                    .eq('external_transaction_id', transaction_ref);
+            }
+        }
+
+        return new Response(JSON.stringify(result), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
+      }
 
       default:
-        throw new Error(`Unknown action: ${action}`);
+        throw new Error(`Unsupported action: ${action}`);
     }
   } catch (error) {
-    console.error('MyCoolPay payment error:', error);
-    return new Response(JSON.stringify({ 
-      success: false, 
-      error: error.message 
-    }), {
+    console.error('MyCoolPay integration error:', error);
+    return new Response(JSON.stringify({ success: false, error: error.message }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

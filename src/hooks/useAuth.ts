@@ -12,7 +12,6 @@ export const useAuth = () => {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.email);
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
@@ -76,7 +75,8 @@ export const useAuth = () => {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      
+      setUser(null);
+      setSession(null);
       toast.success('Déconnexion réussiе');
       return { success: true };
     } catch (error: any) {
