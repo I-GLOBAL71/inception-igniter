@@ -230,7 +230,6 @@ export default function CombinedStartScreen({
         <WalletModal 
           isOpen={showWalletModal} 
           onClose={() => setShowWalletModal(false)}
-          userId={user.id}
         />
       )}
     </div>

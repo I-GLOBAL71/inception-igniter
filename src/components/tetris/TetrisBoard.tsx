@@ -581,12 +581,15 @@ export default function TetrisBoard({
       {/* Demo Result Modal */}
       {showDemoResult && (
         <DemoResultModal
+          isOpen={true}
           score={score}
-          lines={lines}
-          multiplier={multiplier}
+          payout={0}
+          isWin={false}
+          isJackpot={false}
+          isDemo={isDemo}
           onPlayReal={() => {
             setShowDemoResult(false);
-            onRealPlay?.();
+            // Note: onRealPlay callback should be passed from parent
           }}
           onPlayAgain={() => {
             setShowDemoResult(false);
