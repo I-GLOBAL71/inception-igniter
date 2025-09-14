@@ -30,16 +30,23 @@ export const useAuth = () => {
 
   const signInWithEmail = async (email: string) => {
     try {
+      console.log('Attempting email login for:', email);
       const redirectUrl = `${window.location.origin}/`;
+      console.log('Redirect URL:', redirectUrl);
       
-      const { error } = await supabase.auth.signInWithOtp({
+      const { error, data } = await supabase.auth.signInWithOtp({
         email,
         options: {
           emailRedirectTo: redirectUrl
         }
       });
 
-      if (error) throw error;
+      console.log('Supabase response:', { error, data });
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
 
       toast.success('Lien de connexion envoyé ! Vérifiez votre email.');
       return { success: true };
@@ -52,16 +59,23 @@ export const useAuth = () => {
 
   const signInWithGoogle = async () => {
     try {
+      console.log('Attempting Google login');
       const redirectUrl = `${window.location.origin}/`;
+      console.log('Redirect URL:', redirectUrl);
       
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { error, data } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: redirectUrl
         }
       });
 
-      if (error) throw error;
+      console.log('Google auth response:', { error, data });
+
+      if (error) {
+        console.error('Google auth error:', error);
+        throw error;
+      }
 
       return { success: true };
     } catch (error: any) {
