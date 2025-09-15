@@ -152,7 +152,7 @@ export default function CombinedStartScreen({
             {isDemo ? 'Solde virtuel' : 'Solde disponible'}
           </div>
           <div className="text-2xl font-bold text-secondary">
-            {balance.toLocaleString()} FCFA
+            {formatAmount(balance / 655.96)}
           </div>
         </Card>
 
@@ -181,7 +181,7 @@ export default function CombinedStartScreen({
               >
                 <div className="text-center">
                   <div className="font-semibold">{amount.toLocaleString()}</div>
-                  <div className="text-xs opacity-75">FCFA</div>
+                  
                 </div>
               </Button>
             ))}
@@ -193,7 +193,7 @@ export default function CombinedStartScreen({
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Gains estimés (1000 pts):</span>
             <span className="font-bold text-success">
-              {getEstimatedGains(selectedBet, isDemo).toLocaleString()} FCFA
+              {formatAmount(getEstimatedGains(selectedBet, isDemo) / 655.96)}
             </span>
           </div>
         </Card>

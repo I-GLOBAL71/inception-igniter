@@ -8,6 +8,7 @@ import { Wallet, Plus, Minus, History, CreditCard } from 'lucide-react';
 import { useWallet } from '@/hooks/useWallet';
 import { useAuth } from '@/hooks/useAuth';
 import { useWithdrawal } from '@/hooks/useWithdrawal';
+import { useCurrency } from '@/hooks/useCurrency.tsx';
 import './payment-popup.css';
 import type { Tables } from '@/integrations/supabase/types';
 
@@ -38,7 +39,8 @@ const WithdrawalContent = ({
   processWithdrawal,
   resetForm,
   transactionRef,
-}: ReturnType<typeof useWithdrawal> & { wallet: WalletType | null }) => {
+  formatAmount,
+}: ReturnType<typeof useWithdrawal> & { wallet: WalletType | null; formatAmount: (amount: number) => string }) => {
 
   if (status === 'polling' || status === 'processing') {
     return (
@@ -82,7 +84,7 @@ const WithdrawalContent = ({
       <div className="user-balance">
         <div className="balance-card">
           <span className="balance-label">Solde disponible</span>
-          <span className="balance-amount">{wallet?.balance?.toLocaleString() || 0} FCFA</span>
+          <span className="balance-amount">{formatAmount((wallet?.balance || 0) / 655.96)}</span>
         </div>
       </div>
 
@@ -104,9 +106,9 @@ const WithdrawalContent = ({
       {selectedOperator && (
         <div className="withdrawal-form">
           <div className="form-group">
-            <label htmlFor="withdrawal-amount">Montant à retirer (XAF)</label>
-            <Input type="number" id="withdrawal-amount" value={amount} onChange={(e) => setAmount(e.target.value ? Number(e.target.value) : '')} min="1000" step="500" placeholder="Minimum 1000 XAF" />
-            <small className="form-hint">Montant minimum : 1000 XAF</small>
+            <label htmlFor="withdrawal-amount">Montant à retirer</label>
+            <Input type="number" id="withdrawal-amount" value={amount} onChange={(e) => setAmount(e.target.value ? Number(e.target.value) : '')} min="1000" step="500" placeholder="Montant minimum" />
+            <small className="form-hint">Montant minimum selon votre devise</small>
           </div>
 
           <div className={`form-group ${selectedOperator === 'MCP' ? 'hidden' : ''}`}>
@@ -127,9 +129,9 @@ const WithdrawalContent = ({
 
           <div className="withdrawal-fees">
             <div className="fee-breakdown">
-              <span>Montant demandé: <strong>{typeof amount === 'number' ? amount.toLocaleString() : 0} FCFA</strong></span>
-              <span>Frais estimés: <strong>{fees.toLocaleString()} FCFA</strong></span>
-              <span className="total">Total à débiter: <strong>{totalDebit.toLocaleString()} FCFA</strong></span>
+              <span>Montant demandé: <strong>{formatAmount((typeof amount === 'number' ? amount : 0) / 655.96)}</strong></span>
+              <span>Frais estimés: <strong>{formatAmount(fees / 655.96)}</strong></span>
+              <span className="total">Total à débiter: <strong>{formatAmount(totalDebit / 655.96)}</strong></span>
             </div>
           </div>
 
@@ -145,6 +147,7 @@ const WithdrawalContent = ({
 
 export default function WalletModal({ isOpen, onClose }: WalletModalProps) {
   const { user } = useAuth();
+  const { formatAmount } = useCurrency();
   const { wallet, transactions, loading, initiateMyCoolPayPayment, verifyMyCoolPayOtp, checkMyCoolPayStatus, fetchWallet, fetchTransactions } = useWallet(user?.id);
   
   const withdrawal = useWithdrawal(user?.id, wallet, () => {
@@ -267,9 +270,9 @@ export default function WalletModal({ isOpen, onClose }: WalletModalProps) {
               <label className="text-sm font-medium mb-2 block">Montant à recharger</label>
               <div className="grid grid-cols-3 gap-2 mb-3">
                 {DEPOSIT_AMOUNTS.map((amount) => (
-                  <Button key={amount} variant={depositAmount === amount ? "default" : "outline"} onClick={() => setDepositAmount(amount)}>
-                    {amount.toLocaleString()} FCFA
-                  </Button>
+                   <Button key={amount} variant={depositAmount === amount ? "default" : "outline"} onClick={() => setDepositAmount(amount)}>
+                     {formatAmount(amount / 655.96)}
+                   </Button>
                 ))}
               </div>
               <Input type="number" placeholder="Montant personnalisé" value={depositAmount} onChange={(e) => setDepositAmount(Number(e.target.value))} min={500} />
@@ -290,9 +293,9 @@ export default function WalletModal({ isOpen, onClose }: WalletModalProps) {
                 <Input type="tel" placeholder="Ex: 237xxxxxxxxx" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} required />
               </div>
             )}
-            <Button onClick={initiatePayment} disabled={processing} className="w-full h-12 gaming-button-primary">
-              {processing ? 'Traitement...' : `Recharger ${depositAmount.toLocaleString()} FCFA`}
-            </Button>
+             <Button onClick={initiatePayment} disabled={processing} className="w-full h-12 gaming-button-primary">
+               {processing ? 'Traitement...' : `Recharger ${formatAmount(depositAmount / 655.96)}`}
+             </Button>
           </div>
         );
       case 'otp_verification':
@@ -362,7 +365,7 @@ export default function WalletModal({ isOpen, onClose }: WalletModalProps) {
             <Card className="gaming-card p-6 text-center">
               <div className="text-sm text-muted-foreground mb-2">Solde disponible</div>
               <div className="text-4xl font-bold gaming-text-gradient">
-                {loading ? '...' : `${wallet?.balance?.toLocaleString() || 0} FCFA`}
+                {loading ? '...' : formatAmount((wallet?.balance || 0) / 655.96)}
               </div>
               <div className="flex gap-3 justify-center mt-4">
                 <Button onClick={() => setActiveTab('deposit')} className="gaming-button-primary">
@@ -387,7 +390,7 @@ export default function WalletModal({ isOpen, onClose }: WalletModalProps) {
 
           <TabsContent value="withdraw" className="space-y-6 mt-6">
             <Card className="gaming-card p-6">
-              <WithdrawalContent {...withdrawal} wallet={wallet} />
+              <WithdrawalContent {...withdrawal} wallet={wallet} formatAmount={formatAmount} />
             </Card>
           </TabsContent>
 

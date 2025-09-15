@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Settings, DollarSign, Gauge, Volume2, Database, TrendingUp, Target, CreditCard, Trophy } from 'lucide-react';
 import { useGameEconomics } from '@/hooks/useGameEconomics';
 import { useGameSettings, GameSettings } from '@/hooks/useGameSettings';
+import { useCurrency } from '@/hooks/useCurrency.tsx';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -23,6 +24,7 @@ interface BatchGenerationForm {
 
 export default function AdminPanel({ onClose }: AdminPanelProps) {
   const { settings: initialSettings } = useGameSettings();
+  const { formatAmount } = useCurrency();
   
   const [settings, setSettings] = useState<Partial<GameSettings>>(() => initialSettings || {});
   const [apiKeys, setApiKeys] = useState({ lygos: '', mycoolpay_private: '' });
@@ -342,7 +344,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                        />
                      </div>
                      <div>
-                       <Label>Mise moyenne (FCFA): {batchForm.averageBetAmount.toLocaleString()}</Label>
+                       <Label>Mise moyenne: {formatAmount(batchForm.averageBetAmount / 655.96)}</Label>
                        <Slider
                          value={[batchForm.averageBetAmount]}
                          onValueChange={([value]) => setBatchForm({...batchForm, averageBetAmount: value})}
@@ -351,20 +353,20 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                      </div>
                      <div className="p-4 bg-muted rounded-lg space-y-2">
                        <h4 className="font-medium">Prévisions du lot:</h4>
-                       <p className="text-sm">Investment total: {(batchForm.totalGames * batchForm.averageBetAmount).toLocaleString()} FCFA</p>
-                       {economicConfig && (
-                         <>
-                           <p className="text-sm text-success">
-                             Gains joueurs: {Math.floor((batchForm.totalGames * batchForm.averageBetAmount * economicConfig.player_share_percentage / 100)).toLocaleString()} FCFA
-                           </p>
-                           <p className="text-sm text-primary">
-                             Revenus plateforme: {Math.floor((batchForm.totalGames * batchForm.averageBetAmount * economicConfig.platform_share_percentage / 100)).toLocaleString()} FCFA
-                           </p>
-                           <p className="text-sm text-accent">
-                             Contribution jackpot: {Math.floor((batchForm.totalGames * batchForm.averageBetAmount * economicConfig.jackpot_share_percentage / 100)).toLocaleString()} FCFA
-                           </p>
-                         </>
-                       )}
+                        <p className="text-sm">Investment total: {formatAmount((batchForm.totalGames * batchForm.averageBetAmount) / 655.96)}</p>
+                        {economicConfig && (
+                          <>
+                            <p className="text-sm text-success">
+                              Gains joueurs: {formatAmount(Math.floor((batchForm.totalGames * batchForm.averageBetAmount * economicConfig.player_share_percentage / 100)) / 655.96)}
+                            </p>
+                            <p className="text-sm text-primary">
+                              Revenus plateforme: {formatAmount(Math.floor((batchForm.totalGames * batchForm.averageBetAmount * economicConfig.platform_share_percentage / 100)) / 655.96)}
+                            </p>
+                            <p className="text-sm text-accent">
+                              Contribution jackpot: {formatAmount(Math.floor((batchForm.totalGames * batchForm.averageBetAmount * economicConfig.jackpot_share_percentage / 100)) / 655.96)}
+                            </p>
+                          </>
+                        )}
                      </div>
                      <Button 
                        onClick={handleGenerateBatch}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Coins, Play, Trophy, Zap } from 'lucide-react';
+import { useCurrency } from '@/hooks/useCurrency.tsx';
 
 interface BettingScreenProps {
   balance: number;
@@ -13,6 +14,7 @@ const BET_AMOUNTS = [100, 500, 1000, 2500, 5000, 10000];
 
 export default function BettingScreen({ balance, demoMode, onStartGame }: BettingScreenProps) {
   const [selectedBet, setSelectedBet] = useState(500);
+  const { formatAmount } = useCurrency();
 
   const handleStartGame = () => {
     onStartGame(selectedBet);
@@ -53,7 +55,7 @@ export default function BettingScreen({ balance, demoMode, onStartGame }: Bettin
             <span className="text-sm text-muted-foreground">Solde disponible</span>
           </div>
           <div className="text-2xl font-bold text-secondary">
-            {balance.toLocaleString()} FCFA
+            {formatAmount(balance / 655.96)}
           </div>
           {demoMode && (
             <div className="mt-2 px-3 py-1 rounded-full bg-accent/20 text-accent text-xs font-medium inline-block">
@@ -79,8 +81,7 @@ export default function BettingScreen({ balance, demoMode, onStartGame }: Bettin
                 disabled={amount > balance}
               >
                 <div className="text-center">
-                  <div>{amount.toLocaleString()}</div>
-                  <div className="text-xs opacity-75">FCFA</div>
+                  <div>{formatAmount(amount / 655.96)}</div>
                 </div>
               </Button>
             ))}
@@ -92,7 +93,7 @@ export default function BettingScreen({ balance, demoMode, onStartGame }: Bettin
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-sm text-muted-foreground">Mise sélectionnée:</span>
-              <span className="font-semibold text-primary">{selectedBet.toLocaleString()} FCFA</span>
+              <span className="font-semibold text-primary">{formatAmount(selectedBet / 655.96)}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-muted-foreground">Multiplicateur:</span>
@@ -104,7 +105,7 @@ export default function BettingScreen({ balance, demoMode, onStartGame }: Bettin
             <div className="flex justify-between items-center">
               <span className="text-sm text-muted-foreground">Gains estimés (1000 pts):</span>
               <span className="font-semibold text-success">
-                {getEstimatedGains(selectedBet).toLocaleString()} FCFA
+                {formatAmount(getEstimatedGains(selectedBet) / 655.96)}
               </span>
             </div>
           </div>
@@ -130,7 +131,7 @@ export default function BettingScreen({ balance, demoMode, onStartGame }: Bettin
             </div>
             <div className="flex items-center">
               <div className="w-2 h-2 bg-secondary rounded-full mr-2"></div>
-              <span>Chaque point de score = gain en FCFA</span>
+              <span>Chaque point de score = gain en devise</span>
             </div>
             <div className="flex items-center">
               <div className="w-2 h-2 bg-accent rounded-full mr-2"></div>

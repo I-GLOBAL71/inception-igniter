@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/sheet"
 import { useAuth } from '@/hooks/useAuth';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useCurrency } from '@/hooks/useCurrency.tsx';
 import { User } from '@supabase/supabase-js';
 
 interface GameHeaderProps {
@@ -85,6 +86,7 @@ const UserNav = ({ user, signOut }: { user: User; signOut: () => Promise<any> })
 
 export default function GameHeader({ balance = 0, demoMode = true }: GameHeaderProps) {
   const { user, signOut, loading } = useAuth();
+  const { formatAmount } = useCurrency();
 
   return (
     <header className="w-full gaming-card p-4 mb-6">
@@ -107,7 +109,7 @@ export default function GameHeader({ balance = 0, demoMode = true }: GameHeaderP
               <Coins className="w-4 h-4 text-secondary" />
               <div className="text-right">
                 <div className="text-sm font-semibold text-secondary">
-                  {balance.toLocaleString()} FCFA
+                  {formatAmount(balance / 655.96)}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   {demoMode ? '(Demo)' : 'Réel'}
