@@ -52,21 +52,20 @@ export const useAuth = () => {
   const signInWithEmail = async (email: string) => {
     try {
       console.log('Attempting email login for:', email);
-      const redirectUrl = `${window.location.origin}/`;
-      console.log('Redirect URL:', redirectUrl);
       
       const { error, data } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: redirectUrl
+          emailRedirectTo: window.location.origin
         }
       });
 
-      console.log('Supabase response:', { error, data });
+      console.log('Email OTP response:', { error, data });
 
       if (error) {
-        console.error('Supabase error:', error);
-        throw error;
+        console.error('Email OTP error:', error);
+        toast.error(`Erreur d'authentification: ${error.message}`);
+        return { success: false, error: error.message };
       }
 
       toast.success('Lien de connexion envoyé ! Vérifiez votre email.');
@@ -81,23 +80,24 @@ export const useAuth = () => {
   const signInWithGoogle = async () => {
     try {
       console.log('Attempting Google login');
-      const redirectUrl = `${window.location.origin}/`;
-      console.log('Redirect URL:', redirectUrl);
+      console.log('Current origin:', window.location.origin);
       
       const { error, data } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: redirectUrl
+          redirectTo: window.location.origin
         }
       });
 
-      console.log('Google auth response:', { error, data });
+      console.log('Google OAuth response:', { error, data });
 
       if (error) {
-        console.error('Google auth error:', error);
-        throw error;
+        console.error('Google OAuth error:', error);
+        toast.error(`Erreur Google: ${error.message}`);
+        return { success: false, error: error.message };
       }
 
+      // L'utilisateur sera redirigé vers Google, pas besoin de toast ici
       return { success: true };
     } catch (error: any) {
       console.error('Google login error:', error);
