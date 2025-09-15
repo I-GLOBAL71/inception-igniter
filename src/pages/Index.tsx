@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Trophy, Settings, Volume2, VolumeX } from 'lucide-react';
+import { ArrowLeft, Trophy, Settings, Volume2, VolumeX, LogOut, User as UserIcon } from 'lucide-react';
 import TetrisBoard from '@/components/tetris/TetrisBoard';
 import AdminPanel from '@/components/admin/AdminPanel';
 import CombinedStartScreen from '@/components/game/CombinedStartScreen';
@@ -33,7 +33,7 @@ const Index = () => {
     playDebrisFall,
     setVolume
   } = useSound();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { wallet } = useWallet(user?.id);
   const { startRealMoneyGame, completeRealMoneyGame } = useRealMoneyGame(user?.id);
 
@@ -150,12 +150,19 @@ const Index = () => {
           <Trophy className="w-5 h-5 text-primary" />
           <span className="font-bold gaming-text-gradient">GameWin</span>
         </div>
-        <div className="text-sm font-bold text-secondary w-28 text-right">
-          {formatAmount(balance)}
+        <div className="flex items-center space-x-2">
+          <div className="text-sm font-bold text-secondary">
+            {formatAmount(balance)}
+          </div>
+          <Button onClick={() => setEnabled(!enabled)} variant="ghost" size="icon">
+            {enabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+          </Button>
+          {user && (
+            <Button onClick={signOut} variant="ghost" size="icon" title="Déconnexion">
+              <LogOut className="w-4 h-4" />
+            </Button>
+          )}
         </div>
-        <Button onClick={() => setEnabled(!enabled)} variant="ghost" size="icon">
-          {enabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
-        </Button>
       </header>
 
       {/* Mobile Stats Bar */}
