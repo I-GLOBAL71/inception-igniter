@@ -9,9 +9,26 @@ export const useAuth = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Vérifier la configuration Supabase
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('Configuration Supabase manquante:', { 
+        url: !!supabaseUrl, 
+        key: !!supabaseKey 
+      });
+      toast.error('Configuration d\'authentification manquante');
+      setLoading(false);
+      return;
+    }
+    
+    console.log('Configuration Supabase:', { url: supabaseUrl });
+
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        console.log('Auth state changed:', event, session?.user?.email);
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
@@ -19,7 +36,11 @@ export const useAuth = () => {
     );
 
     // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error('Erreur lors de la récupération de la session:', error);
+      }
+      console.log('Session existante:', session?.user?.email);
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
