@@ -60,7 +60,6 @@ export default function BatchPreview({ batch, onClose }: BatchPreviewProps) {
   }, [games, searchTerm, filterStatus, sortBy]);
 
   const fetchBatchGames = async () => {
-  const fetchBatchGames = async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -78,10 +77,6 @@ export default function BatchPreview({ batch, onClose }: BatchPreviewProps) {
       setLoading(false);
     }
   };
-  };
-
-  const filterAndSortGames = () => {
-    let filtered = [...games];
 
   const filterAndSortGames = () => {
     let filtered = [...games];
@@ -119,7 +114,6 @@ export default function BatchPreview({ batch, onClose }: BatchPreviewProps) {
     });
 
     setFilteredGames(filtered);
-  };
   };
 
   const getStatusBadge = (game: GameData) => {
