@@ -5,12 +5,13 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings, DollarSign, Gauge, Volume2, Database, TrendingUp, Target, CreditCard, Trophy } from 'lucide-react';
+import { Settings, DollarSign, Gauge, Volume2, Database, TrendingUp, Target, CreditCard, Trophy, Eye } from 'lucide-react';
 import { useGameEconomics } from '@/hooks/useGameEconomics';
 import { useGameSettings, GameSettings } from '@/hooks/useGameSettings';
 import { useCurrency } from '@/hooks/useCurrency.tsx';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import BatchPreview from './BatchPreview';
 
 interface AdminPanelProps {
   onClose: () => void;
@@ -37,6 +38,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   });
   const [isGenerating, setIsGenerating] = useState(false);
   const [allBatches, setAllBatches] = useState<any[]>([]);
+  const [selectedBatchForPreview, setSelectedBatchForPreview] = useState<any | null>(null);
   
   const {
     economicConfig,
@@ -447,22 +449,30 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                                Créé le {new Date(batch.created_at).toLocaleDateString('fr-FR')}
                              </p>
                            </div>
-                           <div className="flex gap-2">
-                             {!batch.is_active && (
-                               <Button
-                                 size="sm"
-                                 onClick={() => {
-                                   activateBatch(batch.id).then(() => {
-                                     toast.success('Lot activé');
-                                     fetchActiveBatch();
-                                     loadAllBatches();
-                                   });
-                                 }}
-                               >
-                                 Activer
-                               </Button>
-                             )}
-                           </div>
+                            <div className="flex gap-2">
+                              {!batch.is_active && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    activateBatch(batch.id).then(() => {
+                                      toast.success('Lot activé');
+                                      fetchActiveBatch();
+                                      loadAllBatches();
+                                    });
+                                  }}
+                                >
+                                  Activer
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSelectedBatchForPreview(batch)}
+                              >
+                                <Eye className="w-4 h-4 mr-1" />
+                                Prévisualiser
+                              </Button>
+                            </div>
                          </div>
                        ))}
                      </div>
@@ -614,6 +624,13 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
           </div>
         </CardContent>
       </Card>
+      
+      {selectedBatchForPreview && (
+        <BatchPreview
+          batch={selectedBatchForPreview}
+          onClose={() => setSelectedBatchForPreview(null)}
+        />
+      )}
     </div>
   );
 }
