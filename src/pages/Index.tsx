@@ -256,6 +256,7 @@ const Index = () => {
               playGameOver={playGameOver}
               playDebrisFall={playDebrisFall}
               gameSettings={settings}
+              maxScore={!isDemo && gameSession?.maxScore ? gameSession.maxScore : undefined}
             />
           </div>
         </main>

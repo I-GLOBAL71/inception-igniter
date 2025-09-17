@@ -32,6 +32,7 @@ interface TetrisBoardProps {
   playGameOver: () => void;
   playDebrisFall: () => void;
   gameSettings: GameSettings;
+  maxScore?: number;
 }
 
 export default function TetrisBoard({
@@ -45,7 +46,8 @@ export default function TetrisBoard({
   playLineClear,
   playGameOver,
   playDebrisFall,
-  gameSettings
+  gameSettings,
+  maxScore
 }: TetrisBoardProps) {
   const [board, setBoard] = useState<(string | null)[][]>(() =>
     Array(BOARD_HEIGHT).fill(null).map(() => Array(BOARD_WIDTH).fill(null))
@@ -151,7 +153,13 @@ export default function TetrisBoard({
       // Update score and level immediately
       const clearedLinesCount = linesToClearIndices.length;
       const newLines = lines + clearedLinesCount;
-      const newScore = score + clearedLinesCount * 100 * level * multiplier;
+      let newScore = score + clearedLinesCount * 100 * level * multiplier;
+      
+      // Cap score at maxScore if provided (for real money games)
+      if (maxScore && newScore > maxScore) {
+        newScore = maxScore;
+      }
+      
       const newLevel = Math.floor(newLines / 10) + 1;
       const newMultiplier = Math.min(5, multiplier + (clearedLinesCount === 4 ? 0.5 : 0.2));
 

@@ -67,7 +67,11 @@ export const useRealMoneyGame = (userId?: string) => {
         return null;
       }
 
-      const sessionWithGame = { ...gameSession, game: nextGame };
+      const sessionWithGame = { 
+        ...gameSession, 
+        game: nextGame,
+        maxScore: nextGame.max_achievable_score // Pass max score to limit gameplay
+      };
       setCurrentGameSession(sessionWithGame);
       console.log('Real money game started:', sessionWithGame);
       return sessionWithGame;
@@ -95,14 +99,19 @@ export const useRealMoneyGame = (userId?: string) => {
       // Permissive demo payout
       payout = (score / 500) * (bet_amount || 100) * 0.1;
     } else {
-      // Real money payout logic
+      // Real money payout logic - adapt to actual bet amount
       const scoreRatio = Math.min(score / (game.max_achievable_score || 20000), 1);
+      const betRatio = bet_amount / game.bet_amount; // Ratio between actual and expected bet
+      
       if (game.result_type === 'win' && scoreRatio >= 0.5) {
-        payout = game.expected_payout * scoreRatio;
+        // Scale payout based on both score performance and bet ratio
+        payout = game.expected_payout * betRatio * scoreRatio;
       } else if (game.result_type === 'jackpot' && scoreRatio >= 0.8) {
-        payout = game.expected_payout;
+        // Jackpot scaled by bet ratio
+        payout = game.expected_payout * betRatio;
         isJackpot = true;
       }
+      // For losses, no payout regardless of score
     }
     payout = Math.floor(payout);
 

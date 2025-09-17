@@ -250,16 +250,39 @@ export function useGameEconomics() {
       return null;
     }
 
-    // Find a suitable unplayed game based on bet amount and skill level
+    // Try to find exact match first, then expand search range gradually
+    const searchRanges = [
+      { minVar: 0.9, maxVar: 1.1 }, // ±10%
+      { minVar: 0.7, maxVar: 1.3 }, // ±30%
+      { minVar: 0.5, maxVar: 2.0 }, // ±50% to 2x
+      { minVar: 0.1, maxVar: 5.0 }  // Very flexible
+    ];
+
+    for (const range of searchRanges) {
+      const { data, error } = await supabase
+        .from('pre_generated_games')
+        .select('*')
+        .eq('batch_id', activeBatch.id)
+        .eq('is_played', false)
+        .gte('bet_amount', betAmount * range.minVar)
+        .lte('bet_amount', betAmount * range.maxVar)
+        .gte('skill_requirement', Math.max(1, playerSkillLevel - 2))
+        .lte('skill_requirement', Math.min(10, playerSkillLevel + 2))
+        .order('game_index')
+        .limit(1)
+        .single();
+
+      if (!error && data) {
+        return data;
+      }
+    }
+
+    // If no game found with skill constraint, try without skill constraint
     const { data, error } = await supabase
       .from('pre_generated_games')
       .select('*')
       .eq('batch_id', activeBatch.id)
       .eq('is_played', false)
-      .gte('bet_amount', betAmount * 0.8) // Allow 20% variance
-      .lte('bet_amount', betAmount * 1.2)
-      .gte('skill_requirement', Math.max(1, playerSkillLevel - 2))
-      .lte('skill_requirement', Math.min(10, playerSkillLevel + 2))
       .order('game_index')
       .limit(1)
       .single();
