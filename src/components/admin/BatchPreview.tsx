@@ -259,7 +259,7 @@ export default function BatchPreview({ batch, onClose }: BatchPreviewProps) {
               </div>
             </TabsContent>
 
-            <TabsContent value="games" className="flex-1 flex flex-col space-y-4">
+            <TabsContent value="games" className="flex-1 flex flex-col space-y-4 min-h-0">
               <div className="flex-shrink-0 flex flex-wrap gap-4 items-center">
                 <div className="flex items-center gap-2">
                   <Search className="w-4 h-4" />
@@ -298,53 +298,55 @@ export default function BatchPreview({ batch, onClose }: BatchPreviewProps) {
                 </div>
               </div>
 
-              <ScrollArea className="flex-1">
-                <div className="space-y-2">
-                  {filteredGames.map((game) => (
-                    <Card key={game.id} className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-4">
-                          <div>
-                            <p className="text-xs text-muted-foreground">ID Partie</p>
-                            <p className="font-mono text-sm">{game.id.slice(0, 8)}...</p>
+              <div className="flex-1 min-h-0">
+                <ScrollArea className="h-full">
+                  <div className="space-y-2 pr-4">
+                    {filteredGames.map((game) => (
+                      <Card key={game.id} className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-4">
+                            <div>
+                              <p className="text-xs text-muted-foreground">ID Partie</p>
+                              <p className="font-mono text-sm">{game.id.slice(0, 8)}...</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">Score Cible</p>
+                              <p className="font-bold">{game.max_achievable_score.toLocaleString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">Gain Maximal</p>
+                              <p className="font-bold text-green-600">
+                                {formatAmount(game.expected_payout / 655.96)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">Score Réel</p>
+                              <p className="font-bold">
+                                {game.actual_score ? game.actual_score.toLocaleString() : '-'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">Gain Réel</p>
+                              <p className="font-bold text-primary">
+                                {game.actual_payout ? 
+                                  formatAmount(game.actual_payout / 655.96) : '-'}
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Score Cible</p>
-                            <p className="font-bold">{game.max_achievable_score.toLocaleString()}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Gain Maximal</p>
-                            <p className="font-bold text-green-600">
-                              {formatAmount(game.expected_payout / 655.96)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Score Réel</p>
-                            <p className="font-bold">
-                              {game.actual_score ? game.actual_score.toLocaleString() : '-'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Gain Réel</p>
-                            <p className="font-bold text-primary">
-                              {game.actual_payout ? 
-                                formatAmount(game.actual_payout / 655.96) : '-'}
-                            </p>
+                          <div className="flex items-center gap-2">
+                            {getStatusBadge(game)}
+                            {game.played_at && (
+                              <Badge variant="outline" className="text-xs">
+                                {new Date(game.played_at).toLocaleDateString('fr-FR')}
+                              </Badge>
+                            )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {getStatusBadge(game)}
-                          {game.played_at && (
-                            <Badge variant="outline" className="text-xs">
-                              {new Date(game.played_at).toLocaleDateString('fr-FR')}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              </ScrollArea>
+                      </Card>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
             </TabsContent>
 
             <TabsContent value="analytics" className="flex-1">
