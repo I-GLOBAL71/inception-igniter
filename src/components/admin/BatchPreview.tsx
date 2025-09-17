@@ -143,7 +143,7 @@ export default function BatchPreview({ batch, onClose }: BatchPreviewProps) {
 
   return (
     <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-7xl max-h-[90vh] flex flex-col">
+      <Card className="w-full max-w-7xl h-[90vh] flex flex-col">
         <CardHeader className="flex-shrink-0">
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
@@ -156,7 +156,7 @@ export default function BatchPreview({ batch, onClose }: BatchPreviewProps) {
           </div>
         </CardHeader>
 
-        <CardContent className="flex-1 overflow-hidden">
+        <CardContent className="flex-1 overflow-hidden p-6">
           <Tabs defaultValue="overview" className="h-full flex flex-col">
             <TabsList className="flex-shrink-0">
               <TabsTrigger value="overview">Vue d'ensemble</TabsTrigger>
@@ -259,8 +259,8 @@ export default function BatchPreview({ batch, onClose }: BatchPreviewProps) {
               </div>
             </TabsContent>
 
-            <TabsContent value="games" className="flex-1 flex flex-col space-y-4 min-h-0">
-              <div className="flex-shrink-0 flex flex-wrap gap-4 items-center">
+            <TabsContent value="games" className="flex-1 flex flex-col min-h-0">
+              <div className="flex-shrink-0 flex flex-wrap gap-4 items-center mb-4">
                 <div className="flex items-center gap-2">
                   <Search className="w-4 h-4" />
                   <Input
@@ -298,55 +298,53 @@ export default function BatchPreview({ batch, onClose }: BatchPreviewProps) {
                 </div>
               </div>
 
-              <div className="flex-1 min-h-0">
-                <ScrollArea className="h-full">
-                  <div className="space-y-2 pr-4">
-                    {filteredGames.map((game) => (
-                      <Card key={game.id} className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-4">
-                            <div>
-                              <p className="text-xs text-muted-foreground">ID Partie</p>
-                              <p className="font-mono text-sm">{game.id.slice(0, 8)}...</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground">Score Cible</p>
-                              <p className="font-bold">{game.max_achievable_score.toLocaleString()}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground">Gain Maximal</p>
-                              <p className="font-bold text-green-600">
-                                {formatAmount(game.expected_payout / 655.96)}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground">Score Réel</p>
-                              <p className="font-bold">
-                                {game.actual_score ? game.actual_score.toLocaleString() : '-'}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground">Gain Réel</p>
-                              <p className="font-bold text-primary">
-                                {game.actual_payout ? 
-                                  formatAmount(game.actual_payout / 655.96) : '-'}
-                              </p>
-                            </div>
+              <ScrollArea className="flex-1">
+                <div className="space-y-2 pr-4">
+                  {filteredGames.map((game) => (
+                    <Card key={game.id} className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-4">
+                          <div>
+                            <p className="text-xs text-muted-foreground">ID Partie</p>
+                            <p className="font-mono text-sm">{game.id.slice(0, 8)}...</p>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {getStatusBadge(game)}
-                            {game.played_at && (
-                              <Badge variant="outline" className="text-xs">
-                                {new Date(game.played_at).toLocaleDateString('fr-FR')}
-                              </Badge>
-                            )}
+                          <div>
+                            <p className="text-xs text-muted-foreground">Score Cible</p>
+                            <p className="font-bold">{game.max_achievable_score.toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Gain Maximal</p>
+                            <p className="font-bold text-green-600">
+                              {formatAmount(game.expected_payout / 655.96)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Score Réel</p>
+                            <p className="font-bold">
+                              {game.actual_score ? game.actual_score.toLocaleString() : '-'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Gain Réel</p>
+                            <p className="font-bold text-primary">
+                              {game.actual_payout ? 
+                                formatAmount(game.actual_payout / 655.96) : '-'}
+                            </p>
                           </div>
                         </div>
-                      </Card>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </div>
+                        <div className="flex items-center gap-2">
+                          {getStatusBadge(game)}
+                          {game.played_at && (
+                            <Badge variant="outline" className="text-xs">
+                              {new Date(game.played_at).toLocaleDateString('fr-FR')}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </ScrollArea>
             </TabsContent>
 
             <TabsContent value="analytics" className="flex-1">
