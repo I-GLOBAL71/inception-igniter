@@ -70,10 +70,57 @@ export default function TetrisBoard({
   const scoreRef = useRef<HTMLDivElement | null>(null);
   const [scorePosition, setScorePosition] = useState<{ x: number; y: number } | null>(null);
 
-  // Generate random piece
+  // Generate piece with difficulty scaling based on score proximity to maxScore
   const generatePiece = useCallback(() => {
-    const pieces = Object.keys(PIECES);
-    const randomPiece = pieces[Math.floor(Math.random() * pieces.length)] as keyof typeof PIECES;
+    const pieces = Object.keys(PIECES) as (keyof typeof PIECES)[];
+    
+    // If no maxScore, use normal random generation
+    if (!maxScore) {
+      const randomPiece = pieces[Math.floor(Math.random() * pieces.length)];
+      return {
+        type: randomPiece,
+        shape: PIECES[randomPiece].shape,
+        color: PIECES[randomPiece].color,
+        x: Math.floor(BOARD_WIDTH / 2) - 1,
+        y: 0,
+      };
+    }
+    
+    // Calculate difficulty scaling based on score proximity to maxScore
+    const scoreRatio = score / maxScore;
+    const difficultyFactor = Math.min(1, Math.max(0, (scoreRatio - 0.7) / 0.3)); // Starts at 70% of maxScore
+    
+    // Define piece difficulty (easier pieces first, harder pieces last)
+    const easyPieces: (keyof typeof PIECES)[] = ['I', 'O']; // Line and square - easy to place
+    const mediumPieces: (keyof typeof PIECES)[] = ['T', 'L', 'J']; // T, L, J - medium difficulty
+    const hardPieces: (keyof typeof PIECES)[] = ['S', 'Z']; // S, Z - harder to place efficiently
+    
+    // Adjust probabilities based on difficulty factor
+    const easyWeight = Math.max(0.1, 1 - difficultyFactor * 2); // Reduce easy pieces as score increases
+    const mediumWeight = Math.max(0.2, 1 - difficultyFactor); // Slightly reduce medium pieces
+    const hardWeight = Math.min(2, 1 + difficultyFactor * 3); // Increase hard pieces significantly
+    
+    // Build weighted piece array
+    const weightedPieces: (keyof typeof PIECES)[] = [];
+    
+    // Add easy pieces
+    for (let i = 0; i < Math.round(easyWeight * 10); i++) {
+      weightedPieces.push(...easyPieces);
+    }
+    
+    // Add medium pieces
+    for (let i = 0; i < Math.round(mediumWeight * 10); i++) {
+      weightedPieces.push(...mediumPieces);
+    }
+    
+    // Add hard pieces
+    for (let i = 0; i < Math.round(hardWeight * 10); i++) {
+      weightedPieces.push(...hardPieces);
+    }
+    
+    // Select random piece from weighted array
+    const randomPiece = weightedPieces[Math.floor(Math.random() * weightedPieces.length)];
+    
     return {
       type: randomPiece,
       shape: PIECES[randomPiece].shape,
@@ -81,7 +128,7 @@ export default function TetrisBoard({
       x: Math.floor(BOARD_WIDTH / 2) - 1,
       y: 0,
     };
-  }, []);
+  }, [maxScore, score]);
 
   // Check if piece can be placed
   const isValidMove = useCallback((piece: any, newX: number, newY: number, newShape?: number[][]) => {
@@ -153,11 +200,21 @@ export default function TetrisBoard({
       // Update score and level immediately
       const clearedLinesCount = linesToClearIndices.length;
       const newLines = lines + clearedLinesCount;
-      let newScore = score + clearedLinesCount * 100 * level * multiplier;
+      let baseScore = clearedLinesCount * 100 * level * multiplier;
       
-      // Cap score at maxScore if provided (for real money games)
+      // Apply natural score scaling when approaching maxScore
+      if (maxScore && score > maxScore * 0.7) {
+        const proximityFactor = (score - maxScore * 0.7) / (maxScore * 0.3);
+        const scalingFactor = Math.max(0.1, 1 - proximityFactor * 0.8); // Reduce score gain by up to 80%
+        baseScore *= scalingFactor;
+      }
+      
+      let newScore = score + baseScore;
+      
+      // Soft cap: allow slight overage but with severe diminishing returns
       if (maxScore && newScore > maxScore) {
-        newScore = maxScore;
+        const overage = newScore - maxScore;
+        newScore = maxScore + overage * 0.1; // Only 10% of overage is awarded
       }
       
       const newLevel = Math.floor(newLines / 10) + 1;
