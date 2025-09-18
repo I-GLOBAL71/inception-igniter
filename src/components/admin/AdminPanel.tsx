@@ -222,8 +222,9 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="economics" className="w-full">
-            <TabsList className="grid w-full grid-cols-6">
+            <TabsList className="grid w-full grid-cols-7">
               <TabsTrigger value="economics">Économie</TabsTrigger>
+              <TabsTrigger value="gains">Gains</TabsTrigger>
               <TabsTrigger value="batches">Lots</TabsTrigger>
               <TabsTrigger value="jackpot">Jackpot</TabsTrigger>
               <TabsTrigger value="payments">Paiements</TabsTrigger>
@@ -315,6 +316,105 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                 ) : (
                   <div className="col-span-2"><p>Chargement de la configuration économique...</p></div>
                 )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="gains" className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Trophy className="w-5 h-5" />
+                      Paramètres des Gains Estimés
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {economicConfig && (
+                      <>
+                        <div>
+                          <Label>Score de référence: {economicConfig.reference_score || 1000}</Label>
+                          <Slider
+                            value={[economicConfig.reference_score || 1000]}
+                            onValueChange={([value]) => handleUpdateEconomicConfig('reference_score', value)}
+                            max={5000} min={500} step={100}
+                          />
+                          <div className="text-xs text-muted-foreground">
+                            Score utilisé pour calculer les gains estimés
+                          </div>
+                        </div>
+                        <div>
+                          <Label>Taux gains démo (%): {((economicConfig.demo_gain_rate || 0.5) * 100).toFixed(1)}%</Label>
+                          <Slider
+                            value={[(economicConfig.demo_gain_rate || 0.5) * 100]}
+                            onValueChange={([value]) => handleUpdateEconomicConfig('demo_gain_rate', value / 100)}
+                            max={100} min={10} step={5}
+                          />
+                          <div className="text-xs text-muted-foreground">
+                            Pourcentage de la mise retourné en mode démo
+                          </div>
+                        </div>
+                        <div>
+                          <Label>Taux gains réel (%): {((economicConfig.real_gain_rate || 0.1) * 100).toFixed(1)}%</Label>
+                          <Slider
+                            value={[(economicConfig.real_gain_rate || 0.1) * 100]}
+                            onValueChange={([value]) => handleUpdateEconomicConfig('real_gain_rate', value / 100)}
+                            max={50} min={5} step={1}
+                          />
+                          <div className="text-xs text-muted-foreground">
+                            Pourcentage de la mise retourné en mode réel
+                          </div>
+                        </div>
+                        <div>
+                          <Label>Multiplicateur démo: {(economicConfig.demo_multiplier || 2.5).toFixed(1)}x</Label>
+                          <Slider
+                            value={[(economicConfig.demo_multiplier || 2.5) * 10]}
+                            onValueChange={([value]) => handleUpdateEconomicConfig('demo_multiplier', value / 10)}
+                            max={50} min={10} step={1}
+                          />
+                          <div className="text-xs text-muted-foreground">
+                            Multiplicateur de base pour le mode démo
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Target className="w-5 h-5" />
+                      Aperçu des Gains
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {economicConfig && (
+                      <div className="space-y-3">
+                        <h4 className="font-medium">Simulation pour différentes mises:</h4>
+                        {[500, 1000, 2500, 5000].map(bet => {
+                          const referenceScore = economicConfig.reference_score || 1000;
+                          const demoRate = economicConfig.demo_gain_rate || 0.5;
+                          const realRate = economicConfig.real_gain_rate || 0.1;
+                          const demoMultiplier = economicConfig.demo_multiplier || 2.5;
+                          const realMultiplier = 1.0 + (bet / 10000);
+                          
+                          const demoGain = Math.floor(referenceScore * demoMultiplier * demoRate);
+                          const realGain = Math.floor(referenceScore * realMultiplier * realRate);
+                          
+                          return (
+                            <div key={bet} className="p-2 bg-muted rounded text-sm">
+                              <div className="font-medium">{formatAmount(bet / 655.96)}</div>
+                              <div className="text-xs text-muted-foreground">
+                                Démo: {formatAmount(demoGain / 655.96)} | 
+                                Réel: {formatAmount(realGain / 655.96)}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             </TabsContent>
 

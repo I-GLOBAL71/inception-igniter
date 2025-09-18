@@ -9,6 +9,10 @@ export interface EconomicConfig {
   base_return_rate: number;
   max_win_multiplier: number;
   jackpot_trigger_rate: number;
+  reference_score?: number;
+  demo_gain_rate?: number;
+  real_gain_rate?: number;
+  demo_multiplier?: number;
 }
 
 export interface GameBatch {

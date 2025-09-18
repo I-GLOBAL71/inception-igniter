@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Trophy, Play, Coins, Gift, User, Wallet } from 'lucide-react';
 import { useCurrency } from '@/hooks/useCurrency.tsx';
 import { useAuth } from '@/hooks/useAuth';
+import { useGameEconomics } from '@/hooks/useGameEconomics';
 import AuthModal from '@/components/auth/AuthModal';
 import WalletModal from '@/components/wallet/WalletModal';
 
@@ -28,6 +29,11 @@ export default function CombinedStartScreen({
   const [showWalletModal, setShowWalletModal] = useState(false);
   const { formatAmount } = useCurrency();
   const { user, loading: authLoading } = useAuth();
+  const { economicConfig, fetchEconomicConfig } = useGameEconomics();
+
+  useEffect(() => {
+    fetchEconomicConfig();
+  }, [fetchEconomicConfig]);
 
   const handleStartGame = () => {
     // Si mode réel mais pas connecté, ouvrir l'authentification
@@ -46,13 +52,17 @@ export default function CombinedStartScreen({
   };
 
   const getMultiplier = (amount: number, demo: boolean) => {
-    if (demo) return 2.5;
+    if (demo) return economicConfig?.demo_multiplier || 2.5;
     return 1.0 + (amount / 10000);
   };
 
   const getEstimatedGains = (amount: number, demo: boolean) => {
-    const baseGain = 1000; // Score moyen estimé
-    return Math.floor(baseGain * getMultiplier(amount, demo) * (demo ? 0.5 : 0.1));
+    const referenceScore = economicConfig?.reference_score || 1000;
+    const gainRate = demo 
+      ? (economicConfig?.demo_gain_rate || 0.5)
+      : (economicConfig?.real_gain_rate || 0.1);
+    
+    return Math.floor(referenceScore * getMultiplier(amount, demo) * gainRate);
   };
 
   return (
@@ -191,7 +201,7 @@ export default function CombinedStartScreen({
         {/* Info gains - Compacte */}
         <Card className="gaming-card p-3">
           <div className="flex justify-between items-center">
-            <span className="text-sm text-muted-foreground">Gains estimés (1000 pts):</span>
+            <span className="text-sm text-muted-foreground">Gains estimés:</span>
             <span className="font-bold text-success">
               {formatAmount(getEstimatedGains(selectedBet, isDemo) / 655.96)}
             </span>
