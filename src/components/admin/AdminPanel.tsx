@@ -42,6 +42,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   
   const {
     economicConfig,
+    setEconomicConfig,
     activeBatch,
     jackpotPool,
     fetchEconomicConfig,
@@ -95,10 +96,17 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   const handleUpdateEconomicConfig = async (field: string, value: number) => {
     if (!economicConfig) return;
     
+    // Update local state immediately for responsiveness
+    setEconomicConfig(prev => prev ? { ...prev, [field]: value } : null);
+    
     const updatedConfig = await updateEconomicConfig({ [field]: value });
     if (updatedConfig) {
+      // Sync with server response
+      setEconomicConfig(updatedConfig);
       toast.success('Configuration économique mise à jour');
     } else {
+      // Revert local change on error
+      await fetchEconomicConfig();
       toast.error('Erreur lors de la mise à jour');
     }
   };

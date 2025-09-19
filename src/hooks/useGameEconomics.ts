@@ -340,6 +340,7 @@ export function useGameEconomics() {
 
   return {
     economicConfig,
+    setEconomicConfig,
     activeBatch,
     jackpotPool,
     fetchEconomicConfig,
