@@ -61,6 +61,10 @@ const defaultEconomicConfig: EconomicConfig = {
   base_return_rate: 0.01,
   max_win_multiplier: 15,
   jackpot_trigger_rate: 0.001,
+  reference_score: 1000,
+  demo_gain_rate: 0.5,
+  real_gain_rate: 0.1,
+  demo_multiplier: 2.5,
 };
 
 export function useGameEconomics() {
